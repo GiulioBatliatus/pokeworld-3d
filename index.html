@@ -1,0 +1,3043 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokéWorld 3D - Gran Aventura</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: #000;
+            user-select: none;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        canvas {
+            display: block;
+            outline: none;
+        }
+
+        /* UI Layers */
+        #login-screen,
+        #register-screen,
+        #starter-screen,
+        #battle-overlay,
+        #game-over,
+        #transition-screen,
+        #backpack-overlay,
+        #switch-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #login-screen {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            z-index: 700;
+        }
+
+        #register-screen {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            z-index: 700;
+            display: none;
+        }
+
+        #starter-screen {
+            background: radial-gradient(circle at center, #1e293b 0%, #000 100%);
+            z-index: 600;
+            display: none;
+        }
+
+        #battle-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            display: none;
+            z-index: 500;
+        }
+
+        #game-over {
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            z-index: 800;
+        }
+
+        #backpack-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            display: none;
+            z-index: 600;
+        }
+
+        #switch-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            display: none;
+            z-index: 610;
+        }
+
+        /* Transición de Portales */
+        #transition-screen {
+            background: black;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #transition-screen.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* Barras de Vida */
+        .hp-bar {
+            height: 12px;
+            background: #334155;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid #1e293b;
+        }
+
+        .hp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hp-low {
+            background: linear-gradient(90deg, #ef4444, #b91c1c);
+        }
+
+        .hp-mid {
+            background: linear-gradient(90deg, #facc15, #eab308);
+        }
+
+        /* Inventario */
+        #inventory {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            width: 260px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 15px;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 85vh;
+            overflow-y: auto;
+            display: none;
+            z-index: 250;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .poke-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: 0.2s;
+        }
+
+        .poke-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .poke-card.active {
+            border-color: #facc15;
+            background: rgba(250, 204, 21, 0.1);
+        }
+
+        /* Botones */
+        .btn-action {
+            background: #facc15;
+            color: #000;
+            font-weight: 800;
+            padding: 14px 28px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            transition: 0.2s;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #ca8a04;
+        }
+
+        .btn-action:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 #ca8a04;
+            background: #fde047;
+        }
+
+        .btn-action:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 0 0 #ca8a04;
+        }
+
+        .btn-action:disabled {
+            background: #94a3b8;
+            color: #475569;
+            box-shadow: none;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* Animaciones de Batalla */
+        @keyframes shake {
+            0% {
+                transform: translate(1px, 1px) rotate(0deg);
+            }
+
+            10% {
+                transform: translate(-1px, -2px) rotate(-1deg);
+            }
+
+            20% {
+                transform: translate(-3px, 0px) rotate(1deg);
+            }
+
+            30% {
+                transform: translate(3px, 2px) rotate(0deg);
+            }
+
+            40% {
+                transform: translate(1px, -1px) rotate(1deg);
+            }
+
+            50% {
+                transform: translate(-1px, 2px) rotate(-1deg);
+            }
+
+            60% {
+                transform: translate(-3px, 1px) rotate(0deg);
+            }
+
+            70% {
+                transform: translate(3px, 1px) rotate(-1deg);
+            }
+
+            80% {
+                transform: translate(-1px, -1px) rotate(1deg);
+            }
+
+            90% {
+                transform: translate(1px, 2px) rotate(0deg);
+            }
+
+            100% {
+                transform: translate(1px, -2px) rotate(-1deg);
+            }
+        }
+
+        .shake-anim {
+            animation: shake 0.5s;
+        }
+
+        @keyframes flashRed {
+            0% {
+                filter: brightness(1) sepia(0) hue-rotate(0) saturate(1);
+            }
+
+            50% {
+                filter: brightness(0.5) sepia(1) hue-rotate(-50deg) saturate(5);
+            }
+
+            100% {
+                filter: brightness(1) sepia(0) hue-rotate(0) saturate(1);
+            }
+        }
+
+        .damage-anim {
+            animation: flashRed 0.3s;
+        }
+
+        /* Badges */
+        .badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .rank-legendary {
+            background: #ef4444;
+            color: white;
+            box-shadow: 0 0 10px #ef4444;
+            border: 2px solid gold;
+        }
+
+        .rank-ultra {
+            background: #000;
+            color: #facc15;
+            box-shadow: 0 0 15px #f0abfc;
+            border: 2px solid #f0abfc;
+            animation: pulseUltra 2s infinite;
+        }
+
+        .rank-epic {
+            background: #a855f7;
+            color: white;
+            box-shadow: 0 0 5px #a855f7;
+        }
+
+        @keyframes pulseUltra {
+            0% {
+                box-shadow: 0 0 10px #f0abfc;
+            }
+
+            50% {
+                box-shadow: 0 0 25px #d946ef;
+            }
+
+            100% {
+                box-shadow: 0 0 10px #f0abfc;
+            }
+        }
+
+        .rank-rare {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .rank-common {
+            background: #64748b;
+            color: white;
+        }
+
+        .type-badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 99px;
+            font-weight: bold;
+            margin-left: 4px;
+        }
+
+        .type-grass {
+            background: #78c850;
+            color: white;
+        }
+
+        .type-fire {
+            background: #f08030;
+            color: white;
+        }
+
+        .type-water {
+            background: #6890f0;
+            color: white;
+        }
+
+        .type-normal {
+            background: #a8a878;
+            color: white;
+        }
+
+        .type-electric {
+            background: #f8d030;
+            color: black;
+        }
+
+        .type-psychic {
+            background: #f85888;
+            color: white;
+        }
+
+        .type-ice {
+            background: #98d8d8;
+            color: black;
+        }
+
+        .type-fighting {
+            background: #c03028;
+            color: white;
+        }
+
+        .type-poison {
+            background: #a040a0;
+            color: white;
+        }
+
+        .type-ground {
+            background: #e0c068;
+            color: black;
+        }
+
+        .type-flying {
+            background: #a890f0;
+            color: black;
+        }
+
+        .type-rock {
+            background: #b8a038;
+            color: white;
+        }
+
+        .type-bug {
+            background: #a8b820;
+            color: black;
+        }
+
+        .type-ghost {
+            background: #705898;
+            color: white;
+        }
+
+        .type-steel {
+            background: #b8b8d0;
+            color: black;
+        }
+
+        .type-dragon {
+            background: #7038f8;
+            color: white;
+        }
+
+        .type-dark {
+            background: #705848;
+            color: white;
+        }
+
+        .type-fairy {
+            background: #ee99ac;
+            color: black;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 99px;
+            border: 1px solid #facc15;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #backpack-btn {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            z-index: 250;
+        }
+
+        #save-exit-btn {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            z-index: 250;
+        }
+
+        /* Map System */
+        .map-node {
+            width: 50px;
+            height: 50px;
+            background: #334155;
+            border: 4px solid #1e293b;
+            border-radius: 50%;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.3s;
+            z-index: 10;
+            box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .map-node:hover:not(.locked) {
+            transform: scale(1.2);
+            box-shadow: 0 0 20px #facc15;
+            border-color: #facc15;
+        }
+
+        .map-node.locked {
+            filter: grayscale(1);
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #475569;
+        }
+
+        .map-node.completed {
+            background: #22c55e;
+            border-color: #4ade80;
+        }
+
+        .map-node.boss {
+            width: 70px;
+            height: 70px;
+            border-width: 6px;
+            border-color: #ef4444;
+        }
+
+        .map-node-label {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            pointer-events: none;
+            opacity: 0;
+            transition: 0.2s;
+        }
+
+        .map-node:hover .map-node-label {
+            opacity: 1;
+            top: -40px;
+        }
+
+        .map-connection {
+            position: absolute;
+            height: 8px;
+            background: #475569;
+            transform-origin: 0 50%;
+            z-index: 5;
+            border-radius: 10px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .map-connection.active {
+            background: linear-gradient(90deg, #facc15, #eab308);
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.6);
+        }
+
+        #story-map::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(34, 197, 94, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.1) 0%, transparent 50%);
+            z-index: 1;
+        }
+
+        #game-ui-hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 2px 4px black;
+            pointer-events: none;
+        }
+
+        .bottom-action-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95), transparent);
+            padding: 20px;
+            z-index: 1000;
+            padding-bottom: 40px;
+        }
+
+        @media (max-height: 800px) {
+            #battle-overlay {
+                padding-top: 10px;
+            }
+
+            #player-img,
+            #enemy-img {
+                width: 120px !important;
+                height: 120px !important;
+            }
+
+            .hp-bar {
+                width: 180px !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Pantalla de Login -->
+    <div id="login-screen">
+        <div class="text-center mb-10">
+            <h1
+                class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 text-6xl font-black mb-2 italic uppercase tracking-tighter filter drop-shadow-lg">
+                PokéWorld 3D</h1>
+            <p class="text-slate-400 text-sm uppercase tracking-[0.5em]">Story Mode Edition</p>
+        </div>
+        <p class="text-white mb-8 text-lg font-medium">Inicia sesión con tu nick</p>
+        <div class="flex flex-col gap-4 w-full max-w-md px-4">
+            <input id="nick-input" type="text" placeholder="Nick"
+                class="bg-slate-900/80 p-4 rounded-xl border border-slate-600 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all shadow-inner backdrop-blur-sm">
+            <input id="password-input" type="password" placeholder="Contraseña"
+                class="bg-slate-900/80 p-4 rounded-xl border border-slate-600 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all shadow-inner backdrop-blur-sm">
+            <button onclick="login()" class="btn-action">Iniciar Sesión</button>
+            <button onclick="showRegister()" class="btn-action bg-blue-600 text-white">Registrarse</button>
+        </div>
+    </div>
+
+    <!-- Pantalla de Registro -->
+    <div id="register-screen">
+        <div class="text-center mb-10">
+            <h1
+                class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 text-6xl font-black mb-2 italic uppercase tracking-tighter filter drop-shadow-lg">
+                PokéWorld 3D</h1>
+            <p class="text-slate-400 text-sm uppercase tracking-[0.5em]">Story Mode Edition</p>
+        </div>
+        <p class="text-white mb-8 text-lg font-medium">Regístrate con un nick</p>
+        <div class="flex flex-col gap-4 w-full max-w-md px-4">
+            <input id="reg-nick-input" type="text" placeholder="Nick"
+                class="bg-slate-900/80 p-4 rounded-xl border border-slate-600 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all shadow-inner backdrop-blur-sm">
+            <input id="reg-password-input" type="password" placeholder="Contraseña"
+                class="bg-slate-900/80 p-4 rounded-xl border border-slate-600 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all shadow-inner backdrop-blur-sm">
+            <input id="reg-confirm-password-input" type="password" placeholder="Confirmar Contraseña"
+                class="bg-slate-900/80 p-4 rounded-xl border border-slate-600 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/50 outline-none transition-all shadow-inner backdrop-blur-sm">
+            <button onclick="register()" class="btn-action">Registrarse</button>
+            <button onclick="showLogin()" class="btn-action bg-blue-600 text-white">Volver a Iniciar Sesión</button>
+        </div>
+    </div>
+
+    <div id="transition-screen"></div>
+
+    <!-- Mapa de Historia -->
+    <div id="story-map" style="display:none; position:fixed; inset:0; z-index:200;">
+        <div class="absolute inset-0 bg-slate-900 overflow-x-auto overflow-y-hidden custom-scrollbar">
+            <div id="map-container" style="width: 1400px; height: 100%; position: relative; padding-right: 150px;">
+                <div id="map-connections" class="absolute inset-0 z-0"></div>
+                <div id="map-nodes" class="relative z-10 w-full h-full">
+                    <!-- Nodos inyectados por JS -->
+                </div>
+            </div>
+
+            <div class="absolute top-10 left-10 z-20">
+                <h2 class="text-4xl font-black text-white italic drop-shadow-lg">MAPA DEL MUNDO</h2>
+                <p class="text-yellow-400 text-sm uppercase tracking-widest font-bold">Nivel Actual: <span
+                        id="current-level-display">1</span></p>
+            </div>
+
+            <button onclick="exitToModeSelection()"
+                class="absolute bottom-10 right-10 btn-action bg-red-600 text-white z-20">Salir</button>
+        </div>
+    </div>
+
+    <!-- Selección de Modo -->
+    <div id="mode-selection"
+        style="display:none; position:fixed; inset:0; z-index:180; background: radial-gradient(circle at center, #1e293b 0%, #000 100%);">
+        <div class="text-center mb-10">
+            <h1
+                class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 text-6xl font-black mb-2 italic uppercase tracking-tighter filter drop-shadow-lg">
+                Elige Modo</h1>
+        </div>
+        <div class="flex gap-8 px-4">
+            <div onclick="chooseMode('normal')"
+                class="group bg-slate-800/50 hover:bg-yellow-900/40 p-10 rounded-3xl border-2 border-slate-700 hover:border-yellow-500 transition-all cursor-pointer text-center w-64">
+                <span class="text-6xl block mb-4">🌎</span>
+                <h2 class="text-2xl font-black text-white italic">EXPLORACIÓN</h2>
+                <p class="text-slate-400 text-xs mt-2 uppercase">Mundo abierto y portales</p>
+            </div>
+            <div onclick="chooseMode('story')"
+                class="group bg-slate-800/50 hover:bg-indigo-900/40 p-10 rounded-3xl border-2 border-slate-700 hover:border-indigo-500 transition-all cursor-pointer text-center w-64">
+                <span class="text-6xl block mb-4">📜</span>
+                <h2 class="text-2xl font-black text-white italic">HISTORIA</h2>
+                <p class="text-slate-400 text-xs mt-2 uppercase">Niveles con Bosses</p>
+            </div>
+            <div onclick="startDamageChallenge()"
+                class="group bg-slate-800/50 hover:bg-red-900/40 p-10 rounded-3xl border-2 border-slate-700 hover:border-red-500 transition-all cursor-pointer text-center w-64">
+                <span class="text-6xl block mb-4">🔥💀</span>
+                <h2 class="text-2xl font-black text-white italic">DESAFÍO DE DAÑO</h2>
+                <p class="text-slate-400 text-xs mt-2 uppercase">Lucha contra Arceus</p>
+            </div>
+        </div>
+        <button onclick="logout()" class="btn-action bg-slate-700 text-white mt-10">🚪 Cerrar Sesión</button>
+    </div>
+
+    <!-- Selección Inicial -->
+    <div id="starter-screen">
+        <div class="text-center mb-10">
+            <h1
+                class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 text-6xl font-black mb-2 italic uppercase tracking-tighter filter drop-shadow-lg">
+                PokéWorld 3D</h1>
+            <p class="text-slate-400 text-sm uppercase tracking-[0.5em]">Story Mode Edition</p>
+        </div>
+        <p class="text-white mb-8 text-lg font-medium">Elige tu compañero inicial</p>
+        <div class="flex flex-wrap justify-center gap-6">
+            <button onclick="pickStarter(1)"
+                class="group bg-slate-800/50 hover:bg-green-900/40 p-6 rounded-3xl border-2 border-slate-700 hover:border-green-500 transition-all duration-300 transform hover:scale-105">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png"
+                    class="w-32 h-32 object-contain drop-shadow-2xl group-hover:scale-110 transition duration-300">
+                <p class="text-white font-bold mt-4 text-xl group-hover:text-green-400">Bulbasaur (Fase 1)</p>
+            </button>
+            <button onclick="pickStarter(4)"
+                class="group bg-slate-800/50 hover:bg-red-900/40 p-6 rounded-3xl border-2 border-slate-700 hover:border-red-500 transition-all duration-300 transform hover:scale-105">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/4.png"
+                    class="w-32 h-32 object-contain drop-shadow-2xl group-hover:scale-110 transition duration-300">
+                <p class="text-white font-bold mt-4 text-xl group-hover:text-red-400">Charmander (Fase 1)</p>
+            </button>
+            <button onclick="pickStarter(7)"
+                class="group bg-slate-800/50 hover:bg-blue-900/40 p-6 rounded-3xl border-2 border-slate-700 hover:border-blue-500 transition-all duration-300 transform hover:scale-105">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/7.png"
+                    class="w-32 h-32 object-contain drop-shadow-2xl group-hover:scale-110 transition duration-300">
+                <p class="text-white font-bold mt-4 text-xl group-hover:text-blue-400">Squirtle (Fase 1)</p>
+            </button>
+        </div>
+    </div>
+
+    <!-- UI Inventario / HUD -->
+    <div id="inventory">
+        <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+            <h2 class="text-xs font-black text-slate-400 uppercase tracking-widest">Equipo</h2>
+            <span id="team-count" class="text-xs text-yellow-400 font-bold">0/3</span> <!-- Cambiado a 3 -->
+        </div>
+        <div id="team-list"></div>
+        <div class="mt-4 pt-2 border-t border-white/10 space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-400">Caramelos:</span>
+                <span id="candies-count" class="text-yellow-400 font-bold">0</span>
+            </div>
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-400">Evo Pociones:</span>
+                <span id="evopotion-count" class="text-purple-400 font-bold">0</span>
+            </div>
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-400">Mega Pociones:</span>
+                <span id="megapotion-count" class="text-pink-500 font-bold">0</span>
+            </div>
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-400">Pociones Salud:</span>
+                <span id="potions-count" class="text-green-400 font-bold">0</span>
+            </div>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-2">
+            <button onclick="openCrafting()" class="btn-action w-full bg-pink-700 text-white border-pink-900">🛠️ Centro
+                de Crafteo</button>
+            <button onclick="usePotion()" id="use-potion-btn"
+                class="btn-action w-full bg-green-700 text-white border-green-900">💊 Usar Poción Salud</button>
+        </div>
+
+        <div class="mt-4 flex flex-col gap-2">
+            <button id="open-map-btn" onclick="openMap()"
+                class="btn-action w-full bg-indigo-600 text-white border-indigo-800">🗺️ Abrir
+                Mapa</button>
+            <button onclick="exitToModeSelection()" class="btn-action w-full bg-red-600 text-white border-red-800">💾
+                Guardar y
+                Salir</button>
+        </div>
+
+        <div class="mt-4 pt-2 border-t border-white/10 text-[10px] text-slate-500 text-center">
+            Muevete con W, A, S, D
+        </div>
+    </div>
+
+    <!-- UI Batalla -->
+    <div id="battle-overlay">
+        <!-- Botón Captura Rápida (HUD) -->
+        <div id="capture-hud" class="absolute top-20 right-4 z-50 hidden">
+            <button onclick="battleAction('capture')"
+                class="btn-action bg-red-600 text-white rounded-full w-16 h-16 flex items-center justify-center border-4 border-white shadow-xl hover:scale-110 transition">
+                <span class="text-2xl">🔴</span>
+            </button>
+            <p class="text-center text-white text-xs font-bold mt-1 bg-black/50 rounded px-1">Capturar</p>
+        </div>
+
+        <div
+            class="flex flex-col md:flex-row gap-4 md:gap-16 items-center mb-32 w-full max-w-6xl justify-center px-4 mt-4 flex-1">
+
+            <!-- Enemigo -->
+            <div id="enemy-container" class="text-center w-full md:w-auto transform transition-all">
+                <div
+                    class="bg-slate-900/80 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-2xl relative">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <span id="enemy-rank" class="badge rank-common shadow-lg">Fase 1</span>
+                    </div>
+                    <div class="flex justify-between items-end mb-2 px-1 flex-wrap">
+                        <p id="enemy-name" class="text-white font-black uppercase text-lg tracking-wide"></p>
+                        <div id="enemy-types" class="flex gap-1"></div>
+                        <p id="enemy-hp-text" class="text-slate-400 text-xs font-mono">100/100</p>
+                    </div>
+                    <div class="w-full md:w-64 hp-bar mb-6 bg-slate-800">
+                        <div id="enemy-hp" class="hp-fill"></div>
+                    </div>
+                    <div class="h-40 flex items-center justify-center">
+                        <img id="enemy-img" src=""
+                            class="w-32 h-32 md:w-48 md:h-48 object-contain drop-shadow-2xl filter brightness-110 transition-transform duration-300">
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-white font-black text-6xl italic opacity-20 hidden md:block">VS</div>
+
+            <!-- Jugador -->
+            <div id="player-container" class="text-center w-full md:w-auto transform transition-all">
+                <div class="bg-slate-900/80 backdrop-blur-md p-6 rounded-3xl border border-yellow-500/20 shadow-2xl">
+                    <div class="flex justify-between items-end mb-2 px-1 flex-wrap">
+                        <p id="player-name"
+                            class="text-white font-black uppercase text-lg tracking-wide text-yellow-400"></p>
+                        <div id="player-types" class="flex gap-1"></div>
+                        <p id="player-hp-text" class="text-slate-400 text-xs font-mono">100/100</p>
+                    </div>
+                    <div class="w-full md:w-64 hp-bar mb-6 bg-slate-800">
+                        <div id="player-hp" class="hp-fill"></div>
+                    </div>
+                    <div class="h-40 flex items-center justify-center">
+                        <img id="player-img" src=""
+                            class="w-32 h-32 md:w-48 md:h-48 object-contain drop-shadow-2xl scale-x-[-1] transition-transform duration-300">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            class="bg-black/60 backdrop-blur-md px-8 py-4 rounded-full border border-white/10 mb-8 min-h-[80px] flex items-center justify-center max-w-2xl w-full mx-4">
+            <p id="battle-text" class="text-white text-xl font-bold text-center"></p>
+        </div>
+
+        <div class="flex gap-4 flex-wrap justify-center bottom-action-bar">
+            <button id="atk-btn" onclick="battleAction('attack')" class="btn-action battle-btn min-w-[140px]">⚔️
+                Atacar</button>
+            <button id="cap-btn" onclick="battleAction('capture')"
+                class="btn-action battle-btn bg-red-600 text-white min-w-[140px] hover:bg-red-500">🔴 Capturar</button>
+            <button id="run-btn" onclick="endBattle(true)"
+                class="btn-action battle-btn bg-slate-700 text-white border-slate-900 min-w-[140px] hover:bg-slate-600">🏃
+                Huir</button>
+        </div>
+    </div>
+
+    <!-- Damage Challenge HUD -->
+    <div id="damage-challenge-hud"
+        style="display:none; position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:510; text-align:center;">
+        <div class="bg-black/80 backdrop-blur-md px-6 py-3 rounded-2xl border border-red-500/50 shadow-xl">
+            <p class="text-red-400 text-xs uppercase tracking-widest font-bold">Desafío de Daño vs Arceus</p>
+            <p class="text-white text-3xl font-black" id="damage-score-display">0</p>
+            <p class="text-slate-400 text-xs">Daño Total Infligido</p>
+            <p class="text-slate-500 text-xs"><span id="damage-round-display">ARCEUS</span></p>
+        </div>
+    </div>
+
+    <!-- Damage Challenge Results -->
+    <div id="damage-challenge-results"
+        style="display:none; position:fixed; inset:0; z-index:900; background: rgba(0,0,0,0.95); flex-direction:column; align-items:center; justify-content:center;">
+        <div class="text-center">
+            <h1
+                class="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-400 text-7xl font-black mb-2 italic tracking-tighter">
+                DESAFÍO TERMINADO</h1>
+            <p class="text-slate-400 mb-4 uppercase tracking-widest">Tu equipo ha caído ante Arceus</p>
+            <div
+                class="bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-red-500/30 shadow-2xl inline-block mb-4">
+                <p class="text-slate-400 text-sm uppercase tracking-widest mb-2">Daño Total Infligido</p>
+                <p id="damage-final-score" class="text-yellow-400 text-6xl font-black">0</p>
+                <p class="text-slate-400 text-sm mt-2">Recompensa: <span id="damage-final-rounds"
+                        class="text-white font-bold">0</span></p>
+            </div>
+            <div id="damage-rewards-detail" class="mb-6 text-lg"></div>
+            <br>
+            <button onclick="exitDamageChallenge()" class="btn-action">Volver al Menú</button>
+        </div>
+    </div>
+
+    <!-- Notificaciones -->
+    <div id="toast"></div>
+
+    <!-- Game Over -->
+    <div id="game-over">
+        <h1 class="text-red-500 text-7xl font-black mb-2 italic tracking-tighter">DERROTA</h1>
+        <p class="text-slate-400 mb-8 uppercase tracking-widest">Tus Pokémon necesitan descansar</p>
+        <button onclick="returnToMap()" class="btn-action">Volver al Mapa</button>
+    </div>
+
+    <!-- Backpack Overlay -->
+    <div id="backpack-overlay">
+        <div
+            class="bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-white/10 shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h2 class="text-white font-black uppercase text-lg tracking-wide mb-4 text-center">Mochila</h2>
+            <span id="backpack-count-overlay" class="text-yellow-400 font-bold block text-center mb-4">0/50</span>
+            <div id="backpack-list-overlay"></div>
+            <button onclick="closeBackpack()" class="btn-action w-full mt-6">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- Switch Pokémon Overlay -->
+    <div id="switch-overlay">
+        <div
+            class="bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-white/10 shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h2 class="text-white font-black uppercase text-lg tracking-wide mb-4 text-center">Elige el siguiente
+                Pokémon</h2>
+            <div id="switch-list"></div>
+        </div>
+    </div>
+
+    <!-- Crafting Overlay -->
+    <div id="crafting-overlay"
+        style="display:none; position:fixed; inset:0; z-index:140; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); flex-direction: column; align-items:center; justify-content:center;">
+        <div
+            class="bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-pink-500/30 shadow-2xl w-full max-w-md">
+            <h2 class="text-white font-black uppercase text-2xl tracking-wide mb-6 text-center text-pink-400 italic">🛠️
+                Laboratorio</h2>
+
+            <div class="space-y-4">
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 flex justify-between items-center">
+                    <div>
+                        <p class="text-white font-bold">Poción de Salud</p>
+                        <p class="text-slate-400 text-[10px]">Cuesta 3 Caramelos</p>
+                    </div>
+                    <button onclick="craftPotion()" class="btn-action py-2 px-4 text-xs">Crear</button>
+                </div>
+
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 flex justify-between items-center">
+                    <div>
+                        <p class="text-white font-bold">Mega Poción</p>
+                        <p class="text-slate-400 text-[10px]">Cuesta 3 Evo Pociones</p>
+                    </div>
+                    <button onclick="craftItem('MEGA_POTION')"
+                        class="btn-action py-2 px-4 text-xs bg-pink-600 text-white">Crear</button>
+                </div>
+            </div>
+
+            <button onclick="closeCrafting()" class="btn-action w-full mt-8 bg-slate-700 text-white">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- Botón de Mochila -->
+    <button id="backpack-btn" onclick="openBackpack()" class="btn-action">Mochila</button>
+
+    <!-- Botón Guardar y Salir -->
+    <button id="save-exit-btn" onclick="exitToModeSelection()" class="btn-action bg-red-600 text-white"
+        style="display:none;">💾 Guardar y Salir</button>
+
+
+
+    <script>
+        // --- Configuración y Datos ---
+        const RANKS = {
+            PHASE_1: {
+                label: 'Fase 1', multiplier: 1, color: 'rank-common', scale: 3.5, power: 15, catchRate: 0.6, candies: 1
+            },
+            PHASE_2: {
+                label: 'Fase 2', multiplier: 1.5, color: 'rank-rare', scale: 4.5, power: 30, catchRate: 0.4, candies: 3
+            },
+            PHASE_3: {
+                label: 'Fase 3', multiplier: 2.2, color: 'rank-epic', scale: 6.0, power: 50, catchRate: 0.2, candies: 5
+            },
+            EX: { label: 'EX', multiplier: 3.5, color: 'rank-legendary', scale: 8.0, power: 80, catchRate: 0.05, candies: 15 },
+            ULTRA_BEAST: {
+                label: 'ULTRAENTE', multiplier: 5.0, color: 'rank-ultra', scale: 10.0, power: 120, catchRate: 0.05, candies: 20
+            },
+            MEGA_EX: {
+                label: 'MEGA EX', multiplier: 6.0, color: 'rank-ultra', scale: 12.0, power: 150, catchRate: 0.01, candies:
+                    50
+            },
+            PRIMARY: {
+                label: 'PRIMIGENIO', multiplier: 12.0, color: 'rank-ultra', scale: 16.0, power: 300, catchRate: 0.003, candies: 150
+            },
+            LEGENDARY: {
+                label: 'Legendario', multiplier: 4.0, color: 'rank-legendary', scale: 10.0, power: 90, catchRate: 0.03,
+                candies: 20
+            }
+        };
+
+        const TYPE_CHART = {
+            Normal: { super: [], notVery: ['Rock', 'Steel'], immune: ['Ghost'] },
+            Fire: { super: ['Grass', 'Ice', 'Bug', 'Steel'], notVery: ['Fire', 'Water', 'Rock', 'Dragon'], immune: [] },
+            Water: { super: ['Fire', 'Ground', 'Rock'], notVery: ['Water', 'Grass', 'Dragon'], immune: [] },
+            Grass: {
+                super: ['Water', 'Ground', 'Rock'], notVery: ['Fire', 'Grass', 'Poison', 'Flying', 'Bug', 'Dragon',
+                    'Steel'], immune: []
+            },
+            Electric: { super: ['Water', 'Flying'], notVery: ['Electric', 'Grass', 'Dragon'], immune: ['Ground'] },
+            Ice: { super: ['Grass', 'Ground', 'Flying', 'Dragon'], notVery: ['Fire', 'Water', 'Ice', 'Steel'], immune: [] },
+            Fighting: {
+                super: ['Normal', 'Ice', 'Rock', 'Dark', 'Steel'], notVery: ['Poison', 'Flying', 'Psychic', 'Bug',
+                    'Fairy'], immune: ['Ghost']
+            },
+            Poison: { super: ['Grass', 'Fairy'], notVery: ['Poison', 'Ground', 'Rock', 'Ghost'], immune: ['Steel'] },
+            Ground: { super: ['Fire', 'Electric', 'Poison', 'Rock', 'Steel'], notVery: ['Grass', 'Bug'], immune: ['Flying'] },
+            Flying: { super: ['Grass', 'Fighting', 'Bug'], notVery: ['Electric', 'Rock', 'Steel'], immune: [] },
+            Psychic: { super: ['Fighting', 'Poison'], notVery: ['Psychic', 'Steel'], immune: ['Dark'] },
+            Bug: {
+                super: ['Grass', 'Psychic', 'Dark'], notVery: ['Fire', 'Fighting', 'Poison', 'Flying', 'Ghost', 'Steel',
+                    'Fairy'], immune: []
+            },
+            Rock: { super: ['Fire', 'Ice', 'Flying', 'Bug'], notVery: ['Fighting', 'Ground', 'Steel'], immune: [] },
+            Ghost: { super: ['Psychic', 'Ghost'], notVery: ['Dark'], immune: ['Normal'] },
+            Dragon: { super: ['Dragon'], notVery: ['Steel'], immune: ['Fairy'] },
+            Dark: { super: ['Psychic', 'Ghost'], notVery: ['Fighting', 'Dark', 'Fairy'], immune: [] },
+            Steel: { super: ['Ice', 'Rock', 'Fairy'], notVery: ['Fire', 'Water', 'Electric', 'Steel'], immune: [] },
+            Fairy: { super: ['Fighting', 'Dragon', 'Dark'], notVery: ['Fire', 'Poison', 'Steel'], immune: [] }
+        };
+
+        function getTypeMultiplier(attackType, defendTypes) {
+            let multiplier = 1;
+            defendTypes.forEach(defType => {
+                if (TYPE_CHART[attackType]?.immune?.includes(defType)) multiplier *= 0;
+                else if (TYPE_CHART[attackType]?.super?.includes(defType)) multiplier *= 2;
+                else if (TYPE_CHART[attackType]?.notVery?.includes(defType)) multiplier *= 0.5;
+            });
+            return multiplier;
+        }
+
+        // Pokédex actualizada con Sistema de Fases
+        const POKEDEX_DATA = {
+            1: { name: "Bulbasaur", rank: 'PHASE_1', stage: 1, next: 2, types: ['Grass', 'Poison'] },
+            2: { name: "Ivysaur", rank: 'PHASE_1', stage: 2, next: 3, types: ['Grass', 'Poison'] },
+            3: { name: "Venusaur", rank: 'PHASE_2', stage: 3, next: 10003, types: ['Grass', 'Poison'] }, // Mega dummy ID
+            10003: { name: "Mega Venusaur", rank: 'MEGA_EX', stage: 4, next: null, types: ['Grass', 'Poison'] },
+
+            4: { name: "Charmander", rank: 'PHASE_1', stage: 1, next: 5, types: ['Fire'] },
+            5: { name: "Charmeleon", rank: 'PHASE_1', stage: 2, next: 6, types: ['Fire'] },
+            6: { name: "Charizard", rank: 'PHASE_2', stage: 3, next: 10034, types: ['Fire', 'Flying'] },
+            10034: { name: "Mega Charizard X", rank: 'MEGA_EX', stage: 4, next: null, types: ['Fire', 'Dragon'] },
+
+            7: { name: "Squirtle", rank: 'PHASE_1', stage: 1, next: 8, types: ['Water'] },
+            8: { name: "Wartortle", rank: 'PHASE_1', stage: 2, next: 9, types: ['Water'] },
+            9: { name: "Blastoise", rank: 'PHASE_2', stage: 3, next: 10009, types: ['Water'] },
+            10009: { name: "Mega Blastoise", rank: 'MEGA_EX', stage: 4, next: null, types: ['Water'] },
+
+            10: { name: "Caterpie", rank: 'PHASE_1', stage: 1, next: 12, types: ['Bug'] },
+            12: { name: "Butterfree", rank: 'PHASE_2', stage: 3, next: null, types: ['Bug', 'Flying'] },
+            16: { name: "Pidgey", rank: 'PHASE_1', stage: 1, next: 18, types: ['Normal', 'Flying'] },
+            18: { name: "Pidgeot", rank: 'PHASE_2', stage: 3, next: 10018, types: ['Normal', 'Flying'] },
+            10018: { name: "Mega Pidgeot", rank: 'MEGA_EX', stage: 4, next: null, types: ['Normal', 'Flying'] },
+
+            19: { name: "Rattata", rank: 'PHASE_1', stage: 1, next: null, types: ['Normal'] },
+            25: { name: "Pikachu", rank: 'PHASE_1', stage: 1, next: 26, types: ['Electric'] },
+            26: { name: "Raichu", rank: 'PHASE_2', stage: 2, next: null, types: ['Electric'] },
+            37: { name: "Vulpix", rank: 'PHASE_1', stage: 1, next: 38, types: ['Fire'] },
+            38: { name: "Ninetales", rank: 'PHASE_2', stage: 2, next: null, types: ['Fire'] },
+            41: { name: "Zubat", rank: 'PHASE_1', stage: 1, next: 42, types: ['Poison', 'Flying'] },
+            42: { name: "Golbat", rank: 'PHASE_1', stage: 2, next: 169, types: ['Poison', 'Flying'] },
+            169: { name: "Crobat", rank: 'PHASE_2', stage: 3, next: null, types: ['Poison', 'Flying'] },
+
+            43: { name: "Oddish", rank: 'PHASE_1', stage: 1, next: 45, types: ['Grass', 'Poison'] },
+            45: { name: "Vileplume", rank: 'PHASE_2', stage: 3, next: null, types: ['Grass', 'Poison'] },
+            50: { name: "Diglett", rank: 'PHASE_1', stage: 1, next: null, types: ['Ground'] },
+            52: { name: "Meowth", rank: 'PHASE_1', stage: 1, next: null, types: ['Normal'] },
+            54: { name: "Psyduck", rank: 'PHASE_1', stage: 1, next: 55, types: ['Water'] },
+            55: { name: "Golduck", rank: 'PHASE_1', stage: 2, next: null, types: ['Water'] },
+            56: { name: "Mankey", rank: 'PHASE_1', stage: 1, next: 57, types: ['Fighting'] },
+            57: { name: "Primeape", rank: 'PHASE_1', stage: 2, next: null, types: ['Fighting'] },
+            58: { name: "Growlithe", rank: 'PHASE_1', stage: 1, next: 59, types: ['Fire'] },
+            59: { name: "Arcanine", rank: 'PHASE_2', stage: 2, next: null, types: ['Fire'] },
+
+            63: { name: "Abra", rank: 'PHASE_1', stage: 1, next: 64, types: ['Psychic'] },
+            64: { name: "Kadabra", rank: 'PHASE_1', stage: 2, next: 65, types: ['Psychic'] },
+            65: { name: "Alakazam", rank: 'PHASE_2', stage: 3, next: 10065, types: ['Psychic'] },
+            10065: { name: "Mega Alakazam", rank: 'MEGA_EX', stage: 4, next: null, types: ['Psychic'] },
+
+            66: { name: "Machop", rank: 'PHASE_1', stage: 1, next: 67, types: ['Fighting'] },
+            67: { name: "Machoke", rank: 'PHASE_1', stage: 2, next: 68, types: ['Fighting'] },
+            68: { name: "Machamp", rank: 'PHASE_2', stage: 3, next: null, types: ['Fighting'] },
+            72: { name: "Tentacool", rank: 'PHASE_1', stage: 1, next: null, types: ['Water', 'Poison'] },
+
+            74: { name: "Geodude", rank: 'PHASE_1', stage: 1, next: 75, types: ['Rock', 'Ground'] },
+            75: { name: "Graveler", rank: 'PHASE_1', stage: 2, next: 76, types: ['Rock', 'Ground'] },
+            76: { name: "Golem", rank: 'PHASE_2', stage: 3, next: null, types: ['Rock', 'Ground'] },
+
+            92: { name: "Gastly", rank: 'PHASE_1', stage: 1, next: 93, types: ['Ghost', 'Poison'] },
+            93: { name: "Haunter", rank: 'PHASE_1', stage: 2, next: 94, types: ['Ghost', 'Poison'] },
+            94: { name: "Gengar", rank: 'PHASE_2', stage: 3, next: 10094, types: ['Ghost', 'Poison'] },
+            10094: { name: "Mega Gengar", rank: 'MEGA_EX', stage: 4, next: null, types: ['Ghost', 'Poison'] },
+
+            95: { name: "Onix", rank: 'PHASE_1', stage: 1, next: 208, types: ['Rock', 'Ground'] },
+            208: { name: "Steelix", rank: 'PHASE_2', stage: 2, next: 10072, types: ['Steel', 'Ground'], role: 'tank' },
+            10072: { name: "Mega Steelix", rank: 'MEGA_EX', stage: 3, next: null, types: ['Steel', 'Ground'], role: 'tank' },
+
+            129: { name: "Magikarp", rank: 'PHASE_1', stage: 1, next: 130, types: ['Water'] },
+            130: { name: "Gyarados", rank: 'PHASE_2', stage: 2, next: 10041, types: ['Water', 'Flying'] },
+            10041: { name: "Mega Gyarados", rank: 'MEGA_EX', stage: 3, next: null, types: ['Water', 'Dark'] },
+            126: { name: "Magmar", rank: 'PHASE_2', stage: 1, next: null, types: ['Fire'] },
+            131: { name: "Lapras", rank: 'PHASE_3', stage: 1, next: null, types: ['Water', 'Ice'] },
+
+            133: { name: "Eevee", rank: 'PHASE_1', stage: 1, next: 134, types: ['Normal'] },
+            134: { name: "Vaporeon", rank: 'PHASE_2', stage: 2, next: null, types: ['Water'] },
+            135: { name: "Jolteon", rank: 'PHASE_2', stage: 2, next: null, types: ['Electric'] },
+            136: { name: "Flareon", rank: 'PHASE_2', stage: 2, next: null, types: ['Fire'] },
+
+            143: { name: "Snorlax", rank: 'PHASE_3', stage: 1, next: null, types: ['Normal'], role: 'tank' },
+            149: { name: "Dragonite", rank: 'PHASE_3', stage: 3, next: null, types: ['Dragon', 'Flying'], role: 'atk' },
+
+            150: { name: "Mewtwo", rank: 'LEGENDARY', stage: 1, next: 10043, types: ['Psychic'] }, // Can evolve to Mega Y
+            10043: { name: "Mega Mewtwo Y", rank: 'MEGA_EX', stage: 2, next: null, types: ['Psychic'] },
+            151: { name: "Mew", rank: 'LEGENDARY', stage: 1, next: null, types: ['Psychic'] },
+
+            246: { name: "Larvitar", rank: 'PHASE_1', stage: 1, next: 247, types: ['Rock', 'Ground'], role: 'tank' },
+            247: { name: "Pupitar", rank: 'PHASE_1', stage: 2, next: 248, types: ['Rock', 'Ground'], role: 'tank' },
+            248: { name: "Tyranitar", rank: 'PHASE_3', stage: 3, next: 10049, types: ['Rock', 'Dark'], role: 'tank' },
+            10049: { name: "Mega Tyranitar", rank: 'MEGA_EX', stage: 4, next: null, types: ['Rock', 'Dark'], role: 'tank' },
+
+            374: { name: "Beldum", rank: 'PHASE_1', stage: 1, next: 375, types: ['Steel', 'Psychic'] },
+            375: { name: "Metang", rank: 'PHASE_1', stage: 2, next: 376, types: ['Steel', 'Psychic'] },
+            376: { name: "Metagross", rank: 'PHASE_3', stage: 3, next: 10076, types: ['Steel', 'Psychic'] },
+            10076: { name: "Mega Metagross", rank: 'MEGA_EX', stage: 4, next: null, types: ['Steel', 'Psychic'] },
+
+            443: { name: "Gible", rank: 'PHASE_1', stage: 1, next: 444, types: ['Dragon', 'Ground'] },
+            444: { name: "Gabite", rank: 'PHASE_1', stage: 2, next: 445, types: ['Dragon', 'Ground'] },
+            445: { name: "Garchomp", rank: 'PHASE_3', stage: 3, next: 10058, types: ['Dragon', 'Ground'] },
+            10058: { name: "Mega Garchomp", rank: 'MEGA_EX', stage: 4, next: null, types: ['Dragon', 'Ground'] },
+
+            447: { name: "Riolu", rank: 'PHASE_1', stage: 1, next: 448, types: ['Fighting'] },
+            448: { name: "Lucario", rank: 'PHASE_2', stage: 2, next: 10048, types: ['Fighting', 'Steel'] },
+            10048: { name: "Mega Lucario", rank: 'MEGA_EX', stage: 3, next: null, types: ['Fighting', 'Steel'] },
+
+            382: { name: "Kyogre", rank: 'LEGENDARY', stage: 1, next: 10077, types: ['Water'] },
+            10077: { name: "Primal Kyogre", rank: 'PRIMARY', stage: 2, next: null, types: ['Water'] },
+            383: { name: "Groudon", rank: 'LEGENDARY', stage: 1, next: 10078, types: ['Ground'] },
+            10078: { name: "Primal Groudon", rank: 'PRIMARY', stage: 2, next: null, types: ['Ground', 'Fire'] },
+            384: { name: "Rayquaza", rank: 'LEGENDARY', stage: 1, next: 10079, types: ['Dragon', 'Flying'] },
+            10079: { name: "Mega Rayquaza", rank: 'PRIMARY', stage: 2, next: null, types: ['Dragon', 'Flying'] },
+
+            643: { name: "Reshiram", rank: 'LEGENDARY', stage: 1, next: null, types: ['Dragon', 'Fire'] },
+            644: { name: "Zekrom", rank: 'LEGENDARY', stage: 1, next: null, types: ['Dragon', 'Electric'] },
+            646: { name: "Kyurem", rank: 'LEGENDARY', stage: 1, next: null, types: ['Dragon', 'Ice'] },
+
+            // Ultraentes (Rate boosted, treated as LEGENDARY for spawn purposes)
+            793: { name: "Nihilego", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Rock', 'Poison'] },
+            794: { name: "Buzzwole", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Bug', 'Fighting'] },
+            795: { name: "Pheromosa", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Bug', 'Fighting'] },
+            796: { name: "Xurkitree", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Electric'] },
+            797: { name: "Celesteela", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Steel', 'Flying'] },
+            798: { name: "Kartana", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Grass', 'Steel'] },
+            799: { name: "Guzzlord", rank: 'ULTRA_BEAST', stage: 1, next: null, types: ['Dark', 'Dragon'] },
+            803: { name: "Poipole", rank: 'PHASE_2', stage: 1, next: 804, types: ['Poison'] },
+            804: { name: "Naganadel", rank: 'ULTRA_BEAST', stage: 2, next: null, types: ['Poison', 'Dragon'] },
+
+            // Volcanion - Pokémon Legendario (Fire/Water) - aparece solo en bioma de fuego
+            721: { name: "Volcanion", rank: 'LEGENDARY', stage: 1, next: null, types: ['Fire', 'Water'] }
+        };
+
+        const BIOMES = {
+            GRASS: {
+                name: 'Pradera Eterna', floor: 0x567d46, fog: 0x87ceeb, portalColor: 0x22c55e,
+                pokes: [1, 2, 3, 10, 12, 16, 18, 19, 25, 26, 43, 45, 52, 56, 57, 63, 64, 65, 66, 67, 68, 133, 135, 143, 151, 149, 447, 448],
+                groundTexture: 'https://threejs.org/examples/textures/terrain/grasslight-big.jpg'
+            },
+            OCEAN: {
+                name: 'Costa Zafiro', floor: 0x1e40af, fog: 0x60a5fa, portalColor: 0x3b82f6,
+                pokes: [7, 8, 9, 54, 55, 72, 129, 130, 131, 134, 382, 646],
+                groundTexture: 'https://threejs.org/examples/textures/terrain/sand.jpg'
+            },
+            CAVE: {
+                name: 'Gruta Sombría', floor: 0x262626, fog: 0x171717, portalColor: 0xa855f7,
+                pokes: [25, 41, 42, 169, 50, 74, 75, 76, 92, 93, 94, 95, 208, 374, 375, 376, 443, 444, 445, 246, 247, 248, 150, 644],
+                groundTexture: 'https://threejs.org/examples/textures/terrain/rock.jpg'
+            },
+            VOLCANO: {
+                name: 'Pico Ardiente', floor: 0x450a0a, fog: 0x7f1d1d, portalColor: 0xef4444,
+                pokes: [4, 5, 6, 37, 38, 58, 59, 126, 136, 248, 445, 376, 149, 383, 384, 643, 721],
+                groundTexture: 'https://threejs.org/examples/textures/terrain/lava.jpg'
+            },
+            ULTRA_SPACE: {
+                name: 'Ultraespacio', floor: 0x2e1065, fog: 0x4c1d95, portalColor: 0xf0abfc,
+                pokes: [793, 794, 795, 796, 797, 798, 799, 803, 804, 92, 94, 150],
+                groundTexture: 'https://threejs.org/examples/textures/terrain/moon_1k.jpg'
+            }
+        };
+
+        // Sistema de Niveles del Modo Historia
+        const LEVELS = [
+            { id: 1, name: "Bosque Inicio", biome: 'GRASS', type: 'wild', x: 60, y: 480 },
+            { id: 2, name: "Ruta 1", biome: 'GRASS', type: 'wild', x: 130, y: 400 },
+            { id: 3, name: "Gimnasio Novato", biome: 'GRASS', type: 'trainer', enemies: [16, 10, 19], x: 200, y: 440 },
+            { id: 4, name: "Pradera Oculta", biome: 'GRASS', type: 'wild', x: 270, y: 360 },
+            { id: 5, name: "Entrada Costa", biome: 'OCEAN', type: 'wild', x: 340, y: 400 },
+            { id: 6, name: "Playa Zafiro", biome: 'OCEAN', type: 'wild', x: 410, y: 320 },
+            { id: 7, name: "Duelo Acuático", biome: 'OCEAN', type: 'trainer', enemies: [54, 129, 7], x: 480, y: 370 },
+            { id: 8, name: "Profundidad Marina", biome: 'OCEAN', type: 'wild', x: 550, y: 290 },
+            { id: 9, name: "Caverna Oscura", biome: 'CAVE', type: 'wild', x: 620, y: 340 },
+            { id: 10, name: "Laberinto Pétreo", biome: 'CAVE', type: 'wild', x: 690, y: 260 },
+            { id: 11, name: "Mega Gengar Maldito", biome: 'CAVE', type: 'boss', boss: 10094, x: 760, y: 310 },
+            { id: 12, name: "Senda del Volcán", biome: 'VOLCANO', type: 'wild', x: 830, y: 230 },
+            { id: 13, name: "Magma Ardiente", biome: 'VOLCANO', type: 'wild', x: 900, y: 280 },
+            { id: 14, name: "Cráter Infernal", biome: 'VOLCANO', type: 'boss', boss: 10034, x: 970, y: 200 },
+            { id: 15, name: "Grieta Ultra", biome: 'ULTRA_SPACE', type: 'wild', x: 1040, y: 250 },
+            { id: 16, name: "Nexo Dimensional", biome: 'ULTRA_SPACE', type: 'trainer', enemies: [793, 795, 797], x: 1110, y: 170 },
+            { id: 17, name: "Trono de Arceus", biome: 'ULTRA_SPACE', type: 'legendary_capture', boss: 493, isFinal: true, x: 1180, y: 120 }
+        ];
+
+        // Arceus: Pokémon exclusivo del Modo Historia (no está en ningún bioma)
+        POKEDEX_DATA[493] = { name: "Arceus", rank: 'PRIMARY', stage: 1, next: null, types: ['Normal'], role: 'tank' };
+
+        // Estado del Juego
+        let scene, camera, renderer, player, ground;
+        let team = [];
+        let backpack = [];
+        let candies = 0, potions = 0, evoPotions = 0, megaPotions = 0;
+        let maxLevel = 1, currentLevel = 1;
+        let pokesInWorld = [], worldDecorations = [], portals = [];
+        let activeIndex = 0;
+        let inBattle = false;
+        let currentEnemy = null;
+        let enemyTeam = [];
+        let activeEnemyIndex = 0;
+        let isTrainerBattle = false;
+        let keys = {};
+        let currentBiome = 'GRASS';
+        let isTeleporting = false;
+        let currentGameMode = 'normal'; // 'normal' o 'story'
+        let clock, walkTime = 0;
+        let leftArm, rightArm, leftLeg, rightLeg;
+        let hasFirstWinOrCapture = false; // Protección primer combate
+        let normalModeHPState = []; // Guardar vida del modo normal antes de entrar a historia o desafio
+        let storyModeHPState = []; // Guardar vida del modo historia
+        let damageChallengeHPSnapshot = []; // Para restaurar vida tras el desafio
+        let isGameRunning = false; // Control del bucle de juego
+        let completedLevels = new Set(); // Niveles completados (para recompensas únicas)
+
+        // --- Desafío de Daño ---
+        let isDamageChallenge = false;
+        let damageScore = 0; // Daño total infligido a Arceus
+        let damageRound = 0; // No se usa como rondas, se mantiene por compatibilidad
+
+        // --- Inicialización 3D ---
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500); // Reducir far clipping para mejor rendimiento
+            renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false }); // Desactivar antialias para optimizar
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limitar pixel ratio
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // Iluminación simplificada con sombras
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+            scene.add(hemiLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 500;
+            scene.add(dirLight);
+
+            // Suelo optimizado con geometría más pequeña
+            ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(600, 600), // Reducir tamaño del plano
+                new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }) // Usar material básico sin iluminación compleja
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Jugador más realista
+            player = new THREE.Group();
+            // Cuerpo (torso)
+            const torsoGeo = new THREE.BoxGeometry(0.6, 0.8, 0.3); // Más rectangular para torso
+            const torsoMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 }); // Amarillo
+            const torso = new THREE.Mesh(torsoGeo, torsoMat);
+            torso.position.y = 1.0;
+            torso.castShadow = true;
+            // Cabeza
+            const headGeo = new THREE.SphereGeometry(0.3, 8, 8); // Cabeza esférica
+            const headMat = new THREE.MeshLambertMaterial({ color: 0xffdbac }); // Piel
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.6;
+            head.castShadow = true;
+            // Gorra
+            const hatGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.1, 8);
+            const hatMat = new THREE.MeshLambertMaterial({ color: 0xef4444 }); // Roja
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 1.8;
+            hat.castShadow = true;
+            // Brazos (dos cilindros)
+            const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.6, 4);
+            const armMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+            leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.position.set(-0.4, 1.0, 0);
+            leftArm.rotation.z = Math.PI / 4; // Inclinados
+            leftArm.castShadow = true;
+            rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.position.set(0.4, 1.0, 0);
+            rightArm.rotation.z = -Math.PI / 4;
+            rightArm.castShadow = true;
+            // Piernas (dos cilindros)
+            const legGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 4);
+            const legMat = new THREE.MeshLambertMaterial({ color: 0x334155 }); // Pantalones azules
+            leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.set(-0.2, 0.4, 0);
+            leftLeg.castShadow = true;
+            rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.set(0.2, 0.4, 0);
+            rightLeg.castShadow = true;
+
+            player.add(torso, head, hat, leftArm, rightArm, leftLeg, rightLeg);
+            player.position.set(0, 0, 15);
+            scene.add(player);
+
+            updateBiomeVisuals();
+
+            if (currentGameMode === 'normal') {
+                spawnPortals();
+            }
+
+            window.addEventListener('keydown', e => keys[e.code] = true);
+            window.addEventListener('keyup', e => keys[e.code] = false);
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Sistema de Biomas y Decoración ---
+        function updateBiomeVisuals(suppressToast = false) {
+            const data = BIOMES[currentBiome];
+            scene.background = new THREE.Color(data.fog);
+            scene.fog = new THREE.Fog(data.fog, 30, 100); // Reducir distancia de niebla
+            ground.material.color.setHex(data.floor);
+
+            // Cargar textura para suelo según bioma
+            const loader = new THREE.TextureLoader();
+            loader.load(data.groundTexture, (texture) => {
+                texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(10, 10); // Ajustar repetición para realismo
+                ground.material.map = texture;
+                ground.material.needsUpdate = true;
+            });
+
+            // Limpiar mundo
+            worldDecorations.forEach(d => scene.remove(d));
+            pokesInWorld.forEach(p => scene.remove(p));
+            worldDecorations = [];
+            pokesInWorld = [];
+
+            // Generar decoración
+            for (let i = 0; i < 40; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 15 + Math.random() * 80;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                let deco;
+                if (currentBiome === 'GRASS') deco = createTree();
+                else if (currentBiome === 'OCEAN') deco = createCoral();
+                else if (currentBiome === 'CAVE') deco = createCrystal();
+                else deco = createRock();
+                deco.position.set(x, 0, z);
+                deco.rotation.y = Math.random() * Math.PI;
+                const scale = 0.8 + Math.random() * 0.5;
+                deco.scale.set(scale, scale, scale);
+                deco.userData = { isObstacle: true, radius: 1.5 * scale };
+                scene.add(deco);
+                worldDecorations.push(deco);
+            }
+            spawnBiomePokemon();
+            if (currentBiome === 'ULTRA_SPACE' || currentBiome === 'VOLCANO') {
+                createParticles(currentBiome === 'ULTRA_SPACE' ? 0xa855f7 : 0xfca5a5);
+            }
+            if (currentGameMode === 'normal') {
+                spawnPortals();
+            }
+            if (!suppressToast) showToast(`Bioma: ${data.name}`);
+        }
+
+        let particles = [];
+        function createParticles(color) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < 200; i++) {
+                vertices.push((Math.random() - 0.5) * 100);
+                vertices.push(Math.random() * 20);
+                vertices.push((Math.random() - 0.5) * 100);
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.PointsMaterial({ color: color, size: 0.5, transparent: true });
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+            worldDecorations.push(points);
+        }
+
+        function createTree() {
+            const g = new THREE.Group();
+            const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 2.5, 12);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1.25;
+            const foliageMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
+            const foliage1 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), foliageMat);
+            foliage1.position.y = 2.5;
+            const foliage2 = new THREE.Mesh(new THREE.SphereGeometry(1.0, 8, 8), foliageMat);
+            foliage2.position.y = 3.5;
+            g.add(trunk, foliage1, foliage2);
+            return g;
+        }
+
+        function createCoral() {
+            const g = new THREE.Group();
+            const mat = new THREE.MeshLambertMaterial({ color: 0xf472b6 });
+            const main = new THREE.Mesh(new THREE.TorusKnotGeometry(0.6, 0.2, 32, 8), mat);
+            main.position.y = 1;
+            g.add(main);
+            return g;
+        }
+
+        function createCrystal() {
+            const mat = new THREE.MeshLambertMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.8 });
+            const m = new THREE.Mesh(new THREE.OctahedronGeometry(1.2, 1), mat);
+            m.position.y = 1;
+            const g = new THREE.Group();
+            g.add(m);
+            return g;
+        }
+
+        function createRock() {
+            const mat = new THREE.MeshLambertMaterial({ color: 0x1c1917 });
+            const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 1), mat);
+            m.position.y = 0.5;
+            return m;
+        }
+        function spawnPortals() {
+            portals.forEach(p => scene.remove(p));
+            portals = [];
+            const bKeys = Object.keys(BIOMES);
+            bKeys.forEach((bk, i) => {
+                const angle = (i / bKeys.length) * Math.PI * 2;
+                const dist = 50;
+                const portalGroup = new THREE.Group();
+
+                const ring = new THREE.Mesh(
+                    new THREE.TorusGeometry(3, 0.3, 8, 16),
+                    new THREE.MeshBasicMaterial({ color: BIOMES[bk].portalColor })
+                );
+
+                const inner = new THREE.Mesh(
+                    new THREE.CircleGeometry(2.8, 16),
+                    new THREE.MeshBasicMaterial({
+                        color: BIOMES[bk].portalColor,
+                        transparent: true,
+                        opacity: 0.3,
+                        side: THREE.DoubleSide
+                    })
+                );
+
+                portalGroup.add(ring, inner);
+
+                // Preview Pokémon
+                const biomePokes = BIOMES[bk].pokes;
+                const randomPokeId = biomePokes[Math.floor(Math.random() * biomePokes.length)];
+                const loader = new THREE.TextureLoader();
+                const pokeUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${randomPokeId}.png`;
+
+                loader.load(pokeUrl, (texture) => {
+                    const pokeMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                    const pokeSprite = new THREE.Sprite(pokeMaterial);
+                    pokeSprite.scale.set(6, 6, 1);
+                    pokeSprite.position.set(0, 5, 0);
+                    portalGroup.add(pokeSprite);
+                });
+
+                portalGroup.position.set(Math.cos(angle) * dist, 2, Math.sin(angle) * dist);
+                portalGroup.lookAt(0, 2, 0);
+
+                portalGroup.userData = { type: 'portal', targetBiome: bk, radius: 4 };
+                scene.add(portalGroup);
+                portals.push(portalGroup);
+            });
+        }
+
+
+        function spawnBiomePokemon() {
+            pokesInWorld.forEach(p => scene.remove(p));
+            pokesInWorld = [];
+
+            const data = BIOMES[currentBiome];
+            if (currentGameMode === 'normal') {
+                // Modo Normal: Spawns aleatorios por todo el mapa
+                for (let i = 0; i < 20; i++) {
+                    const randPokeId = data.pokes[Math.floor(Math.random() * data.pokes.length)];
+                    spawnOnePokemon(randPokeId, false);
+                }
+            }
+        }
+
+        function spawnOnePokemon(pokeId, isBoss, isStoryDirect = false) {
+            const baseData = POKEDEX_DATA[pokeId];
+            if (!baseData) return;
+
+            const rankKey = isBoss ? 'MEGA_EX' : baseData.rank;
+            const rank = RANKS[rankKey];
+
+            const loader = new THREE.TextureLoader();
+            loader.load(`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokeId}.png`,
+                (tex) => {
+                    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+                    const s = new THREE.Sprite(mat);
+                    const scale = rank.scale * (isBoss ? 1.5 : 1);
+                    s.scale.set(scale, scale, 1);
+
+                    if (isBoss || isStoryDirect) {
+                        s.position.set(0, scale / 2, -10);
+                    } else {
+                        let safe = false;
+                        let pos;
+                        while (!safe) {
+                            pos = new THREE.Vector3((Math.random() - 0.5) * 100, scale / 2, (Math.random() - 0.5) * 100);
+                            if (pos.length() > 15) safe = true;
+                        }
+                        s.position.copy(pos);
+                    }
+
+                    s.userData = {
+                        ...baseData,
+                        id: pokeId,
+                        rank: rankKey,
+                        hp: Math.floor(100 * rank.multiplier),
+                        maxHp: Math.floor(100 * rank.multiplier),
+                        url: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokeId}.png`,
+                        spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokeId}.png`,
+                        isBoss: isBoss
+                    };
+
+                    scene.add(s);
+                    pokesInWorld.push(s);
+                });
+        }
+
+        // --- Lógica del Juego ---
+
+        function checkCollision(newPos) {
+            // Colisión con decoración
+            for (let obj of worldDecorations) {
+                const dist = new THREE.Vector2(newPos.x, newPos.z).distanceTo(
+                    new THREE.Vector2(obj.position.x, obj.position.z)
+                );
+                if (dist < (0.5 + obj.userData.radius)) return true;
+            }
+            return false;
+        }
+
+        function animate() {
+            if (!player) return;
+            requestAnimationFrame(animate);
+            if (!isGameRunning) return; // FIX: Pausa la lógica si no está corriendo
+            const delta = clock.getDelta();
+
+            if (!inBattle && !isTeleporting) {
+                // Movimiento
+                let moveSpeed = 0.4;
+                const rotationSpeed = 0.05;
+                let moved = false;
+                const oldPos = player.position.clone();
+
+                if (keys['KeyW']) { player.translateZ(moveSpeed); moved = true; }
+                if (keys['KeyS']) { player.translateZ(-moveSpeed); moved = true; }
+                if (keys['KeyA']) { player.rotation.y += rotationSpeed; }
+                if (keys['KeyD']) { player.rotation.y -= rotationSpeed; }
+
+                // Verificación de colisiones
+                if (moved && checkCollision(player.position)) {
+                    player.position.copy(oldPos);
+                }
+
+                // Animación de caminar
+                if (keys['KeyW'] || keys['KeyS']) {
+                    walkTime += delta * 5;
+                    leftLeg.rotation.x = Math.sin(walkTime) * 0.5;
+                    rightLeg.rotation.x = -Math.sin(walkTime) * 0.5;
+                    leftArm.rotation.x = -Math.sin(walkTime) * 0.5;
+                    rightArm.rotation.x = Math.sin(walkTime) * 0.5;
+                    player.position.y = Math.abs(Math.sin(walkTime)) * 0.2;
+                } else {
+                    leftLeg.rotation.x = 0;
+                    rightLeg.rotation.x = 0;
+                    leftArm.rotation.x = 0;
+                    rightArm.rotation.x = 0;
+                    player.position.y = 0;
+                }
+
+                // Cámara suave
+                const camOffset = new THREE.Vector3(0, 15, -20).applyQuaternion(player.quaternion);
+                const targetPos = player.position.clone().add(camOffset);
+                camera.position.lerp(targetPos, 0.1);
+                camera.lookAt(player.position.x, player.position.y + 2, player.position.z);
+
+                // Lógica de Portales
+                portals.forEach(p => {
+                    p.rotation.z += 0.02;
+
+                    const dist = new THREE.Vector2(player.position.x, player.position.z).distanceTo(
+                        new THREE.Vector2(p.position.x, p.position.z)
+                    );
+
+                    if (dist < 8 && !isTeleporting) {
+                        changeBiomeTransition(p.userData.targetBiome);
+                    }
+                });
+
+                // Encuentros con Pokémon
+                pokesInWorld.forEach(p => {
+                    p.lookAt(player.position.x, p.position.y, player.position.z);
+
+                    const dist = new THREE.Vector2(player.position.x, player.position.z).distanceTo(
+                        new THREE.Vector2(p.position.x, p.position.z)
+                    );
+                    if (dist < 4) {
+                        startBattle(p);
+                    }
+                });
+            } else if (inBattle) {
+                const time = Date.now() * 0.0005;
+                camera.position.x = player.position.x + Math.sin(time) * 10;
+                camera.position.z = player.position.z + Math.cos(time) * 10;
+                camera.lookAt(player.position);
+            }
+            renderer.render(scene, camera);
+        }
+
+        // --- Transiciones ---
+        function changeBiomeTransition(newBiomeKey) {
+            isTeleporting = true;
+            const screen = document.getElementById('transition-screen');
+            screen.classList.add('active');
+            setTimeout(() => {
+                currentBiome = newBiomeKey;
+                player.position.set(0, 0, 10);
+                player.rotation.set(0, 0, 0);
+                updateBiomeVisuals();
+                setTimeout(() => {
+                    screen.classList.remove('active');
+                    setTimeout(() => isTeleporting = false, 500);
+                }, 500);
+            }, 600);
+        }
+
+        // --- Sistema de Batalla ---
+
+        function startBattle(sprite, teamToFight = null) {
+            inBattle = true;
+
+            if (teamToFight) {
+                isTrainerBattle = true;
+                enemyTeam = teamToFight;
+                activeEnemyIndex = 0;
+                currentEnemy = enemyTeam[0];
+            } else {
+                isTrainerBattle = false;
+                currentEnemy = sprite.userData;
+            }
+
+            document.getElementById('battle-overlay').style.display = 'flex';
+            document.getElementById('cap-btn').style.display = isTrainerBattle ? 'none' : 'block';
+            setupEnemyUI();
+
+            // Setup UI Jugador
+            updateBattlePlayerInfo();
+
+            const encounterMsg = isTrainerBattle ? `¡El Entrenador te desafía!` : `¡Un ${currentEnemy.name} salvaje apareció!`;
+            typeText(encounterMsg);
+            enableBattleButtons(true);
+        }
+
+        function setupEnemyUI() {
+            // Nueva lógica para el bug: Si es el starter y NaN, resetear si enemigo es raro o superior
+            const p = team[activeIndex];
+            if (activeIndex === 0 && Number.isNaN(p.hp) && currentEnemy.rank !== 'COMMON') {
+                p.hp = p.maxHp;
+                updateTeamUI();
+                updateBattlePlayerInfo();
+            }
+
+            const r = RANKS[currentEnemy.rank];
+            const eRank = document.getElementById('enemy-rank');
+            eRank.innerText = r.label;
+            eRank.className = `badge ${r.color} shadow-lg`;
+
+            document.getElementById('enemy-name').innerText = currentEnemy.name;
+            document.getElementById('enemy-img').src = currentEnemy.url;
+            updateHpBar('enemy', currentEnemy.hp, currentEnemy.maxHp);
+
+            const enemyTypesDiv = document.getElementById('enemy-types');
+            enemyTypesDiv.innerHTML = currentEnemy.types.map(t =>
+                `<span class="type-badge type-${t.toLowerCase()}">${t}</span>`
+            ).join('');
+        }
+
+        function updateBattlePlayerInfo() {
+            const p = team[activeIndex];
+            document.getElementById('player-name').innerText = p.name;
+            document.getElementById('player-img').src = p.url;
+            updateHpBar('player', p.hp, p.maxHp);
+
+            // Mostrar tipos jugador
+            const playerTypesDiv = document.getElementById('player-types');
+            playerTypesDiv.innerHTML = p.types.map(t =>
+                `<span class="type-badge type-${t.toLowerCase()}">${t}</span>`
+            ).join('');
+        }
+
+        function updateHpBar(target, hp, max) {
+            const bar = document.getElementById(`${target}-hp`);
+            const text = document.getElementById(`${target}-hp-text`);
+
+            // Manejo especial para vida infinita (Arceus en Desafío de Daño)
+            if (hp === Infinity || !isFinite(hp)) {
+                bar.style.width = '100%';
+                bar.className = 'hp-fill';
+                text.innerText = '∞';
+                return;
+            }
+
+            const pct = Math.max(0, (hp / max) * 100);
+            bar.style.width = pct + '%';
+            bar.className = `hp-fill ${pct < 25 ? 'hp-low' : pct < 50 ? 'hp-mid' : ''}`;
+            text.innerText = `${Math.ceil(hp)}/${max}`;
+        }
+
+
+        async function battleAction(type) {
+            if (!inBattle) return;
+            enableBattleButtons(false);
+
+            const p = team[activeIndex];
+            const pImg = document.getElementById('player-img');
+            const eImg = document.getElementById('enemy-img');
+            const pContainer = document.getElementById('player-container');
+            const eContainer = document.getElementById('enemy-container');
+
+            if (type === 'attack') {
+                typeText(`¡${p.name} usa un ataque!`);
+
+                const attackType = p.types[0] || 'Normal';
+                const typeColors = {
+                    Fire: '#ef4444', Water: '#3b82f6', Grass: '#22c55e', Electric: '#eab308',
+                    Psychic: '#d946ef', Ice: '#bae6fd', Dragon: '#6366f1', Dark: '#1f2937',
+                    Steel: '#94a3b8', Fairy: '#f472b6', Rock: '#78716c', Ground: '#a8a29e',
+                    Poison: '#a855f7', Bug: '#84cc16', Fighting: '#f97316', Flying: '#a5b4fc',
+                    Ghost: '#4c1d95', Normal: '#cbd5e1'
+                };
+                const color = typeColors[attackType] || '#fff';
+
+                pImg.style.transition = '0.1s';
+                pImg.style.filter = `drop-shadow(0 0 20px ${color})`;
+                pImg.classList.add('shake-anim');
+                await sleep(300);
+                pImg.style.filter = '';
+                pImg.classList.remove('shake-anim');
+
+                eImg.classList.add('damage-anim', 'shake-anim');
+
+                // Type effectiveness
+                const mult = getTypeMultiplier(attackType, currentEnemy.types);
+                if (mult > 1) typeText("¡Es muy eficaz!");
+                else if (mult < 1 && mult > 0) typeText("No es muy eficaz...");
+                else if (mult === 0) typeText("¡No afecta al enemigo!");
+
+                const baseDmg = 35 * (RANKS[p.rank]?.multiplier || 1);
+                const randomVar = 0.8 + Math.random() * 0.4;
+                const finalDmg = Math.floor(baseDmg * randomVar * mult);
+
+                // En Desafío de Daño, acumular daño pero no reducir HP de Arceus
+                if (isDamageChallenge) {
+                    damageScore += finalDmg;
+                    document.getElementById('damage-score-display').innerText = damageScore;
+                    // No reducir HP de Arceus (vida infinita)
+                } else {
+                    currentEnemy.hp -= finalDmg;
+                }
+                updateHpBar('enemy', currentEnemy.hp, currentEnemy.maxHp);
+
+                await sleep(500);
+                eImg.classList.remove('damage-anim', 'shake-anim');
+
+            }
+
+            if (type === 'capture') {
+                // Bloquear captura en modo historia (excepto nivel legendario final)
+                if (currentGameMode === 'story') {
+                    const lvl = LEVELS.find(l => l.id === currentLevel);
+                    // Permitir capturar si es nivel legendario_capture O si es el nivel final de Arceus (Nivel 17)
+                    if (!lvl || (lvl.type !== 'legendary_capture' && lvl.id !== 17)) {
+                        showToast("¡No puedes capturar Pokémon en el Modo Historia!");
+                        enableBattleButtons(true);
+                        return;
+                    }
+                    if (lvl.id === 17 && currentEnemy.name !== 'Arceus') {
+                        showToast("¡Solo puedes capturar a Arceus aquí!");
+                        enableBattleButtons(true);
+                        return;
+                    }
+                }
+                if (isTrainerBattle) {
+                    showToast("¡No puedes robar los Pokémon de otros entrenadores!");
+                    enableBattleButtons(true);
+                    return;
+                }
+                typeText(`Lanzando Poké-Bola...`);
+                await sleep(1000);
+
+                const catchRate = RANKS[currentEnemy.rank].catchRate;
+                const hpFactor = 1 - (currentEnemy.hp / currentEnemy.maxHp);
+                // Nueva fórmula: CatchRate base + bonus por HP bajo (hasta +50% de probabilidad extra)
+                const chance = catchRate + (hpFactor * (1 - catchRate) * 0.6);
+
+                if (Math.random() < chance) {
+                    typeText(`¡${currentEnemy.name} atrapado!`);
+                    eImg.style.filter = "brightness(0) invert(1)";
+                    hasFirstWinOrCapture = true;
+                    await sleep(500);
+
+                    if (team.length < 3) {
+                        team.push({ ...currentEnemy, hp: currentEnemy.maxHp });
+                        showToast("¡Añadido al equipo!");
+                        updateTeamUI();
+                    } else if (backpack.length < 50) {
+                        backpack.push({ ...currentEnemy, hp: currentEnemy.maxHp });
+                        showToast("¡Añadido a la mochila!");
+                        updateBackpackUI();
+                    } else {
+                        showToast("¡Mochila llena!");
+                    }
+
+                    removeEnemy();
+                    if (currentGameMode === 'story' && !isTrainerBattle) {
+                        typeText("¡Misión Completada!");
+                        await sleep(1500);
+                        completeLevel();
+                    } else {
+                        endBattle();
+                    }
+                    return;
+                } else {
+                    typeText(`¡Se ha liberado!`);
+                    eImg.classList.add('shake-anim');
+                    await sleep(500);
+                    eImg.classList.remove('shake-anim');
+                }
+            }
+
+            // Verificar muerte enemigo
+            if (currentEnemy.hp <= 0) {
+                if (isTrainerBattle && activeEnemyIndex < enemyTeam.length - 1) {
+                    typeText(`¡${currentEnemy.name} ha sido derrotado!`);
+                    await sleep(1000);
+                    activeEnemyIndex++;
+                    currentEnemy = enemyTeam[activeEnemyIndex];
+                    typeText(`¡El Entrenador envía a ${currentEnemy.name}!`);
+                    setupEnemyUI();
+                    await sleep(1000);
+                    enableBattleButtons(true);
+                    return;
+                }
+
+                inBattle = false;
+                const r = RANKS[currentEnemy.rank];
+
+                // Desafío de Daño: Arceus tiene vida infinita, no debería llegar aquí
+                // Pero por seguridad, si llega, lo tratamos como fin
+                if (isDamageChallenge) {
+                    // Arceus no puede morir, restaurar HP
+                    currentEnemy.hp = Infinity;
+                    updateHpBar('enemy', currentEnemy.hp, currentEnemy.maxHp);
+                    enableBattleButtons(true);
+                    return;
+                }
+
+                candies += r.candies;
+
+                let rewardText = isTrainerBattle ? `¡Has vencido al Entrenador!` : `¡${currentEnemy.name} debilitado!`;
+                rewardText += ` +${r.candies} caramelos.`;
+
+                if (isTrainerBattle || currentEnemy.isBoss || currentEnemy.rank === 'EX' || currentEnemy.rank === 'LEGENDARY') {
+                    // Solo dar EvoPoción si es la primera vez en modo historia, o siempre en modo normal
+                    if (currentGameMode !== 'story' || currentLevel === maxLevel) {
+                        evoPotions++;
+                        rewardText += " ¡Obtuviste 1 EvoPoción!";
+                    }
+                }
+
+                updateCandiesUI();
+                updatePotionButtons();
+                hasFirstWinOrCapture = true;
+                showToast(rewardText);
+
+                await sleep(1500);
+
+                if (currentGameMode === 'story') {
+                    typeText("¡Misión Completada!");
+                    await sleep(1500);
+                    completeLevel();
+                } else if (currentEnemy.isBoss) {
+                    typeText("¡Nivel Superado!");
+                    await sleep(1500);
+                    completeLevel();
+                    isTrainerBattle = false;
+                } else {
+                    endBattle(false);
+                }
+                return;
+            }
+
+            // Turno enemigo
+            await sleep(800);
+
+            // Lógica especial de Arceus: Cambiar a tipo super-efectivo contra el jugador
+            // Arceus "Multitipo": Se adapta para golpear donde duele
+            if (isDamageChallenge && currentEnemy.id === 493) {
+                const playerPk = team[activeIndex];
+                const playerTypes = playerPk.types;
+                const types = Object.keys(TYPE_CHART);
+                let bestType = 'Normal';
+                let maxMult = 0;
+
+                // Buscar el tipo que más daño le haga al jugador
+                for (let t of types) {
+                    let m = getTypeMultiplier(t, playerTypes);
+                    if (m > maxMult) {
+                        maxMult = m;
+                        bestType = t;
+                    }
+                }
+
+                // Si ya es el mismo tipo, quizás cambiar a uno aleatorio eficaz para variedad
+                currentEnemy.types = [bestType];
+                setupEnemyUI();
+                typeText(`¡Arceus cambia su tipo a ${bestType} para castigarte!`);
+                await sleep(1200);
+            }
+
+            typeText(`¡${currentEnemy.name} contraataca!`);
+            eImg.classList.add('shake-anim');
+            await sleep(300);
+            eImg.classList.remove('shake-anim');
+
+            pContainer.classList.add('shake-anim');
+            pImg.classList.add('damage-anim');
+
+            const enemyDmg = RANKS[currentEnemy.rank].power * (currentEnemy.powerMult || 1);
+            const enemyMult = getTypeMultiplier(currentEnemy.types[0], p.types);
+            const finalEnemyDmg = Math.floor(enemyDmg * enemyMult);
+
+            if (!hasFirstWinOrCapture && !isDamageChallenge && p.hp - finalEnemyDmg <= 0) {
+                p.hp = 1;
+                typeText(`¡${p.name} resistió por aguantar!`);
+            } else {
+                p.hp -= finalEnemyDmg;
+            }
+
+            updateHpBar('player', p.hp, p.maxHp);
+            updateTeamUI();
+
+            await sleep(500);
+            pContainer.classList.remove('shake-anim');
+            pImg.classList.remove('damage-anim');
+
+            if (p.hp <= 0) {
+                p.hp = 0; // Asegurar 0 exacto
+                updateHpBar('player', 0, p.maxHp);
+                typeText(`¡${p.name} se ha debilitado!`);
+                await sleep(1500);
+
+                const aliveMembers = team.filter(pk => pk.hp > 0);
+                if (aliveMembers.length === 0) {
+                    if (isDamageChallenge) {
+                        endDamageChallenge();
+                    } else {
+                        document.getElementById('game-over').style.display = 'flex';
+                    }
+                } else {
+                    showSwitchOverlay();
+                }
+            } else {
+                enableBattleButtons(true);
+                typeText(`¿Qué hará ${p.name}?`);
+            }
+        }
+
+        // --- Utilidades ---
+
+        function pickStarter(id) {
+            const baseData = POKEDEX_DATA[id];
+            team.push({
+                id,
+                hp: 100,
+                maxHp: 100,
+                name: baseData.name,
+                rank: baseData.rank,
+                stage: baseData.stage,
+                next: baseData.next,
+                types: baseData.types,
+                url:
+                    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`,
+                spriteUrl:
+                    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`
+            });
+            document.getElementById('starter-screen').style.display = 'none';
+            updateTeamUI();
+            saveLocalProgress(); // Guardar al elegir inicial
+            showModeSelection();
+        }
+
+        function showModeSelection() {
+            document.getElementById('inventory').style.display = 'none';
+            document.getElementById('backpack-btn').style.display = 'none';
+            document.getElementById('mode-selection').style.display = 'flex';
+        }
+
+        function chooseMode(mode) {
+            // Antes de cambiar, guardar el estado de vida del modo actual si es normal o historia
+            if (team.length > 0) {
+                if (currentGameMode === 'normal') {
+                    normalModeHPState = team.map(p => ({ id: p.id, hp: p.hp }));
+                } else if (currentGameMode === 'story') {
+                    storyModeHPState = team.map(p => ({ id: p.id, hp: p.hp }));
+                }
+            }
+
+            currentGameMode = mode; // Actualizar modo actual
+
+            // UI General
+            document.getElementById('mode-selection').style.display = 'none';
+            document.getElementById('inventory').style.display = 'block';
+            document.getElementById('backpack-btn').style.display = 'block';
+
+            if (mode === 'normal') {
+                isGameRunning = true; // Activar bucle
+
+                // Ocultar boton mapa historia
+                const mapBtn = document.getElementById('open-map-btn');
+                if (mapBtn) mapBtn.style.display = 'none';
+
+                // Restaurar vida del modo normal si existe
+                if (normalModeHPState.length > 0) {
+                    team.forEach((p, i) => {
+                        const saved = normalModeHPState.find(s => s.id === p.id);
+                        if (saved) p.hp = saved.hp;
+                    });
+                    updateTeamUI();
+                }
+
+                if (!renderer) init();
+                else {
+                    renderer.domElement.style.display = 'block'; // Mostrar 3D
+                    updateBiomeVisuals();
+                    spawnPortals();
+                }
+                document.getElementById('story-map').style.display = 'none'; // Asegurar mapa oculto
+
+            } else if (mode === 'story') {
+                isGameRunning = false; // Pausar bucle 3D
+
+                // Mostrar boton mapa historia
+                const mapBtn = document.getElementById('open-map-btn');
+                if (mapBtn) mapBtn.style.display = 'block';
+
+                // Restaurar vida del modo historia si existe
+                if (storyModeHPState.length > 0) {
+                    team.forEach((p, i) => {
+                        const saved = storyModeHPState.find(s => s.id === p.id);
+                        if (saved) p.hp = saved.hp;
+                    });
+                    updateTeamUI();
+                }
+
+                if (renderer) {
+                    renderer.domElement.style.display = 'none'; // Ocultar 3D completamente
+                }
+
+                openMap(); // Mostrar mapa historia
+            }
+        }
+
+        function openCrafting() {
+            document.getElementById('crafting-overlay').style.display = 'flex';
+        }
+
+        function closeCrafting() {
+            document.getElementById('crafting-overlay').style.display = 'none';
+        }
+
+        function updateTeamUI() {
+            const list = document.getElementById('team-list');
+            document.getElementById('team-count').innerText = `${team.length}/3`;
+            list.innerHTML = team.map((p, i) => `
+                                        <div class="poke-card ${i === activeIndex ? 'active' : ''} ${p.hp <= 0 ? 'opacity-40 grayscale' : ''}"
+                                            onclick="selectActive(${i})">
+                                            <div class="flex items-center gap-3">
+                                                <img src="${p.spriteUrl}" class="w-10 h-10 pixelated">
+                                                <div class="flex-1 min-w-0">
+                                                    <div class="flex justify-between items-center mb-1 flex-wrap">
+                                                        <span
+                                                            class="text-[10px] font-black uppercase truncate mr-1 text-white">${p.name}</span>
+                                                        <div class="flex gap-1">
+                                                            <span class="badge ${RANKS[p.rank].color}"
+                                                                style="font-size:7px; padding:1px 4px">${RANKS[p.rank].label.substring(0,
+                1)}</span>
+                                                            ${p.types.map(t => `<span
+                                                                class="type-badge type-${t.toLowerCase()}"
+                                                                style="font-size:7px;">${t}</span>`).join('')}
+                                                        </div>
+                                                    </div>
+                                                    <div class="hp-bar h-1.5 border-none bg-slate-700">
+                                                        <div class="hp-fill ${p.hp < p.maxHp * 0.3 ? 'hp-low' : ''}"
+                                                            style="width:${(Math.max(0, p.hp) / p.maxHp) * 100}%"></div>
+                                                    </div>
+                                                </div>
+                                                ${p.next ? `<button onclick="evolvePokemon(${i})"
+                                                    class="btn-action text-xs py-1 px-2">Evolucionar</button>` : ''}
+                                                <button onclick="sendToBackpack(${i})"
+                                                    class="btn-action bg-blue-600 text-white text-xs py-1 px-2">A
+                                                    Mochila</button>
+                                            </div>
+                                        </div>
+                                        `).join('');
+            updatePotionButtons();
+        }
+
+        function updatePotionButtons() {
+            document.getElementById('megapotion-count').innerText = megaPotions;
+            document.getElementById('potions-count').innerText = potions;
+        }
+
+        function craftItem(type) {
+            if (type === 'MEGA_POTION') {
+                if (evoPotions >= 3) {
+                    evoPotions -= 3;
+                    megaPotions += 1;
+                    showToast("¡MegaPoción creada!");
+                } else {
+                    showToast("Necesitas 3 EvoPociones");
+                }
+            }
+            updatePotionButtons();
+            updateCandiesUI();
+        }
+
+        function craftPotion() {
+            if (candies >= 3) {
+                candies -= 3;
+                potions += 1;
+                showToast("¡Poción creada!");
+            } else {
+                showToast("Necesitas 3 caramelos");
+            }
+            updateCandiesUI();
+            updatePotionButtons();
+        }
+
+        function usePotion() {
+            if (potions > 0) {
+                potions -= 1;
+                team.forEach(p => p.hp = p.maxHp);
+                updateTeamUI();
+                showToast("¡Equipo sanado!");
+            }
+            updatePotionButtons();
+        }
+
+        // --- Sistema de Mapa y Niveles ---
+        function openMap() {
+            document.getElementById('story-map').style.display = 'block';
+            document.getElementById('inventory').style.display = 'block';
+            document.getElementById('backpack-btn').style.display = 'block';
+            renderMapNodes();
+        }
+
+        function renderMapNodes() {
+            const nodesContainer = document.getElementById('map-nodes');
+            const connectionsContainer = document.getElementById('map-connections');
+            const displayLevel = document.getElementById('current-level-display');
+            displayLevel.innerText = maxLevel;
+
+            let connectionsHTML = "";
+            for (let i = 0; i < LEVELS.length - 1; i++) {
+                const start = LEVELS[i];
+                const end = LEVELS[i + 1];
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                const isActive = end.id <= maxLevel;
+                connectionsHTML += `
+                    <div class="map-connection ${isActive ? 'active' : ''}" 
+                         style="width: ${dist}px; left: ${start.x}px; top: ${start.y}px; transform: rotate(${angle}deg);"></div>
+                `;
+            }
+            connectionsContainer.innerHTML = connectionsHTML;
+
+            nodesContainer.innerHTML = LEVELS.map(lvl => {
+                const isUnlocked = lvl.id <= maxLevel;
+                let icon = "🌲";
+                if (lvl.type === 'trainer') icon = "👤";
+                if (lvl.type === 'boss') icon = "💀";
+                if (lvl.isFinal) icon = "👑";
+
+                return `
+                    <div onclick="${isUnlocked ? `startLevel(${lvl.id})` : ''}" 
+                         class="absolute w-12 h-12 rounded-full border-4 transition-all cursor-pointer flex items-center justify-center
+                         ${isUnlocked ? 'border-yellow-400 bg-slate-800 hover:scale-110 shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'border-slate-700 bg-slate-900 opacity-50'}"
+                         style="left: ${lvl.x}px; top: ${lvl.y}px; transform: translate(-50%, -50%);">
+                        <span class="text-xl">${icon}</span>
+                        <p class="text-[10px] text-white font-bold absolute top-14 whitespace-nowrap bg-black/50 px-2 rounded">${lvl.name}</p>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function startLevel(id) {
+            const lvl = LEVELS.find(l => l.id === id);
+            if (!lvl) return;
+            currentLevel = id;
+            currentBiome = lvl.biome;
+
+            document.getElementById('story-map').style.display = 'none';
+            document.getElementById('inventory').style.display = 'block';
+            document.getElementById('backpack-btn').style.display = 'block';
+
+            if (lvl.type === 'trainer') {
+                const enemies = lvl.enemies.map(eid => createEnemyData(eid, false));
+                startBattle(null, enemies);
+                return;
+            }
+
+            // Historia: Curar equipo eliminado para persistencia de vida
+            // team.forEach(p => p.hp = p.maxHp);
+            // updateTeamUI();
+
+            if (lvl.type === 'boss') {
+                const bossData = createEnemyData(lvl.boss, true);
+                startBattle({ userData: bossData });
+                return;
+            }
+
+            if (lvl.type === 'legendary_capture') {
+                // Boss legendario final capturnable
+                team.forEach(p => p.hp = p.maxHp);
+                updateTeamUI();
+                const bossData = createEnemyData(lvl.boss, true);
+                startBattle({ userData: bossData });
+                showToast(`¡Enfréntate al legendario ${POKEDEX_DATA[lvl.boss].name}!`);
+                return;
+            }
+
+            // Tipo Wild (Salvaje) - Dificultad Progresiva
+            const bioData = BIOMES[lvl.biome];
+            const rand = Math.random();
+            let rank = 'PHASE_1';
+
+            // Probabilidades según nivel
+            if (currentLevel <= 3) {
+                // Inicio: Mayoría Fase 1
+                if (rand < 0.05) rank = 'PHASE_3'; // Muy raro
+                else if (rand < 0.30) rank = 'PHASE_2';
+                else rank = 'PHASE_1';
+            } else if (currentLevel <= 7) {
+                // Medio-Bajo: Mezcla Fase 1 y 2
+                if (rand < 0.05) rank = 'LEGENDARY';
+                else if (rand < 0.25) rank = 'PHASE_3';
+                else if (rand < 0.70) rank = 'PHASE_2';
+                else rank = 'PHASE_1';
+            } else if (currentLevel <= 11) {
+                // Medio-Alto: Fase 2 y 3 dominan
+                if (rand < 0.10) rank = 'MEGA_EX';
+                else if (rand < 0.25) rank = 'ULTRA_BEAST'; // Empiezan a salir Ultraentes
+                else if (rand < 0.50) rank = 'PHASE_3';
+                else if (rand < 0.90) rank = 'PHASE_2';
+                else rank = 'PHASE_1'; // Fase 1 muy poco común
+            } else {
+                // Final: Todo fuerte
+                if (rand < 0.05) rank = 'PRIMARY'; // Posibilidad de Primary salvaje (muy baja)
+                else if (rand < 0.15) rank = 'LEGENDARY';
+                else if (rand < 0.35) rank = 'ULTRA_BEAST'; // Comunes en niveles altos
+                else if (rand < 0.60) rank = 'MEGA_EX';
+                else if (rand < 0.90) rank = 'PHASE_3';
+                else rank = 'PHASE_2';
+            }
+
+            // Filtrar pool del bioma por el rango seleccionado
+            let pool = bioData.pokes.filter(pid => {
+                const pData = POKEDEX_DATA[pid];
+                // Permitir rangos equivalentes o superiores si falta el exacto
+                return pData.rank === rank;
+            });
+
+            // Fallback si no hay pokemons de ese rango en el bioma
+            if (pool.length === 0) {
+                // Intentar buscar Fase 3 o Fase 2 si el rango era muy alto y no hay
+                pool = bioData.pokes.filter(pid => POKEDEX_DATA[pid].rank === 'PHASE_3');
+                if (pool.length === 0) pool = bioData.pokes.filter(pid => POKEDEX_DATA[pid].rank === 'PHASE_2');
+                if (pool.length === 0) pool = bioData.pokes; // Último recurso: cualquiera del bioma
+            }
+
+            const finalPokeId = pool[Math.floor(Math.random() * pool.length)];
+            const wildData = createEnemyData(finalPokeId, false);
+            startBattle({ userData: wildData });
+
+            showToast(`Entrando a: ${lvl.name}`);
+        }
+
+        function createEnemyData(pokeId, isBoss) {
+            const baseData = POKEDEX_DATA[pokeId];
+            if (!baseData) return null;
+
+            // Si es Boss, usar su rango natural si es superior a PHASE_3, o subirlo un escalón
+            let rankKey = baseData.rank;
+            if (isBoss) {
+                if (baseData.rank === 'PHASE_1') rankKey = 'PHASE_2';
+                else if (baseData.rank === 'PHASE_2') rankKey = 'PHASE_3';
+                else if (baseData.rank === 'PHASE_3') rankKey = 'MEGA_EX'; // Bosses fuertes sí pueden ser Mega
+                // Si ya es MEGA_EX, PRIMARY o LEGENDARY, se mantiene
+            }
+            const rank = RANKS[rankKey];
+
+            // Dificultad escalable: +15% de vida y daño por cada nivel de historia
+            const scaleMult = 1 + (currentLevel * 0.15);
+
+            let hpMult = 1, pwrMult = 1;
+            if (baseData.role === 'tank') { hpMult = 1.6; pwrMult = 0.7; }
+            else if (baseData.role === 'atk') { hpMult = 0.7; pwrMult = 1.4; }
+
+            return {
+                ...baseData,
+                id: pokeId,
+                rank: rankKey,
+                hp: Math.floor(100 * rank.multiplier * hpMult * scaleMult),
+                maxHp: Math.floor(100 * rank.multiplier * hpMult * scaleMult),
+                url: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokeId}.png`,
+                spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokeId}.png`,
+                isBoss: isBoss,
+                powerMult: pwrMult * scaleMult
+            };
+        }
+
+        function completeLevel() {
+            const lvl = LEVELS.find(l => l.id === currentLevel);
+            const isFirstClear = !completedLevels.has(currentLevel);
+
+            if (currentLevel === maxLevel) {
+                maxLevel++;
+                showToast("¡Nivel completado! Nuevo nivel desbloqueado.");
+            }
+
+            completedLevels.add(currentLevel);
+
+            // Recompensa: EvoPocion en primera victoria contra entrenadores/bosses
+            if (isFirstClear && lvl && (lvl.type === 'trainer' || lvl.type === 'boss')) {
+                evoPotions++;
+                showToast("¡Obtuviste 1 EvoPoción por primera victoria!");
+                updatePotionButtons();
+            }
+
+            saveLocalProgress();
+
+            // Cerrar batalla si estaba abierta
+            inBattle = false;
+            document.getElementById('battle-overlay').style.display = 'none';
+            enableBattleButtons(true); // FIX: Reactivar botones al ganar/capturar
+
+            // Curar equipo al completar nivel en historia
+            team.forEach(p => p.hp = p.maxHp);
+            updateTeamUI();
+
+            openMap();
+        }
+
+        // --- Desafío de Daño: Lógica ---
+        // Nuevo sistema: Un solo enemigo (Arceus) con vida infinita.
+        // El jugador pelea con sus 3 Pokémon. Cuando los 3 mueran, se acaba.
+        // Se muestra el daño total infligido y se dan recompensas según el daño.
+
+        function startDamageChallenge() {
+            if (team.length === 0) {
+                showToast('¡Necesitas al menos un Pokémon!');
+                return;
+            }
+
+            // Snapshot HP para restaurar al salir (Aislamiento de Desafio)
+            damageChallengeHPSnapshot = team.map(p => ({ id: p.id, hp: p.hp }));
+
+            isDamageChallenge = true;
+            damageScore = 0;
+            damageRound = 0;
+            currentGameMode = 'damage_challenge';
+
+            document.getElementById('mode-selection').style.display = 'none';
+            document.getElementById('inventory').style.display = 'none';
+            document.getElementById('backpack-btn').style.display = 'none';
+
+            // Curar equipo al 100% solo para el desafio
+            team.forEach(p => p.hp = p.maxHp);
+            updateTeamUI();
+
+            // Mostrar HUD de puntuación
+            document.getElementById('damage-challenge-hud').style.display = 'block';
+            document.getElementById('damage-score-display').innerText = '0';
+            document.getElementById('damage-round-display').innerText = 'ARCEUS';
+
+            showToast('¡Desafío de Daño iniciado! Inflige el máximo daño a Arceus.');
+
+            // Iniciar combate contra Arceus
+            startArceusBattle();
+        }
+
+        function startArceusBattle() {
+            const baseData = POKEDEX_DATA[493]; // Arceus
+            const rankKey = 'PRIMARY';
+            const rank = RANKS[rankKey];
+
+            const bossData = {
+                ...baseData,
+                id: 493,
+                rank: 'MEGA_EX',
+                hp: Infinity, // Vida infinita
+                maxHp: 99999, // Para mostrar en la UI
+                url: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/493.png`,
+                spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/493.png`,
+                isBoss: true,
+                powerMult: 1.2 // Arceus equilibrado
+            };
+
+            currentEnemy = bossData;
+            isTrainerBattle = false;
+            inBattle = true;
+
+            document.getElementById('battle-overlay').style.display = 'flex';
+            document.getElementById('cap-btn').style.display = 'none'; // No captura en desafío
+            document.getElementById('run-btn').style.display = 'block'; // Sí puede huir
+            document.getElementById('run-btn').innerText = '🏃 Huir';
+            setupEnemyUI();
+            updateBattlePlayerInfo();
+
+            // Mostrar HP como ∞
+            document.getElementById('enemy-hp-text').innerText = '∞';
+            document.getElementById('enemy-hp').style.width = '100%';
+            document.getElementById('enemy-hp').className = 'hp-fill';
+
+            typeText(`¡Arceus, el Dios Pokémon, te desafía! ¡Inflige todo el daño que puedas!`);
+            enableBattleButtons(true);
+        }
+
+        function endDamageChallenge() {
+            isDamageChallenge = false;
+            inBattle = false;
+
+            document.getElementById('battle-overlay').style.display = 'none';
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('damage-challenge-hud').style.display = 'none';
+
+            // Calcular recompensas según daño total
+            let rewardCandies = 0;
+            let rewardEvoPotions = 0;
+            let rewardMegaPotions = 0;
+            let tier = '';
+
+            if (damageScore <= 0) {
+                rewardCandies = 0;
+                rewardEvoPotions = 0;
+                rewardMegaPotions = 0;
+                tier = '❌ SIN DAÑO';
+            } else if (damageScore >= 15000) {
+                rewardCandies = 100;
+                rewardEvoPotions = 10;
+                rewardMegaPotions = 5;
+                tier = '🏆 MAESTRO POKÉMON';
+            } else if (damageScore >= 8000) {
+                rewardCandies = 60;
+                rewardEvoPotions = 6;
+                rewardMegaPotions = 2;
+                tier = '👑 CAMPEÓN';
+            } else if (damageScore >= 4000) {
+                rewardCandies = 30;
+                rewardEvoPotions = 3;
+                rewardMegaPotions = 1;
+                tier = '⭐ ÉPICO';
+            } else if (damageScore >= 1500) {
+                rewardCandies = 15;
+                rewardEvoPotions = 2;
+                rewardMegaPotions = 0;
+                tier = '🔵 RARO';
+            } else if (damageScore >= 500) {
+                rewardCandies = 5;
+                rewardEvoPotions = 1;
+                rewardMegaPotions = 0;
+                tier = '⚪ COMÚN';
+            } else {
+                rewardCandies = 1;
+                rewardEvoPotions = 0;
+                rewardMegaPotions = 0;
+                tier = '💀 POBRE';
+            }
+
+            // Otorgar recompensas
+            candies += rewardCandies;
+            evoPotions += rewardEvoPotions;
+            megaPotions += rewardMegaPotions;
+            updateCandiesUI();
+            updatePotionButtons();
+
+            // Mostrar resultados con recompensas
+            document.getElementById('damage-final-score').innerText = damageScore;
+            document.getElementById('damage-final-rounds').innerText = tier;
+
+            // Mostrar desglose de recompensas
+            let rewardsEl = document.getElementById('damage-rewards-detail');
+            if (rewardsEl) {
+                rewardsEl.innerHTML = `
+                    <p class="text-yellow-400 font-bold">+${rewardCandies} Caramelos</p>
+                    ${rewardEvoPotions > 0 ? `<p class="text-purple-400 font-bold">+${rewardEvoPotions} EvoPociones</p>` : ''}
+                    ${rewardMegaPotions > 0 ? `<p class="text-pink-400 font-bold">+${rewardMegaPotions} MegaPociones</p>` : ''}
+                `;
+            }
+
+            document.getElementById('damage-challenge-results').style.display = 'flex';
+            saveLocalProgress();
+        }
+
+        function exitDamageChallenge() {
+            document.getElementById('damage-challenge-results').style.display = 'none';
+            document.getElementById('run-btn').style.display = 'block';
+            document.getElementById('run-btn').innerText = '🏃 Huir';
+
+            // Restaurar vida del snapshot (Aislamiento completo)
+            if (damageChallengeHPSnapshot.length > 0) {
+                team.forEach(p => {
+                    const saved = damageChallengeHPSnapshot.find(s => s.id === p.id);
+                    if (saved) p.hp = saved.hp;
+                });
+                updateTeamUI();
+            }
+
+            currentGameMode = 'normal';
+            showModeSelection();
+        }
+
+        function resetPlayerProgress() {
+            team = [];
+            backpack = [];
+            candies = 0;
+            potions = 0;
+            evoPotions = 0;
+            megaPotions = 0;
+            maxLevel = 1;
+            currentLevel = 1;
+            activeIndex = 0; // RESET: Evitar errores de índice
+            hasFirstWinOrCapture = false;
+            normalModeHPState = [];
+            storyModeHPState = [];
+            completedLevels = new Set();
+
+            // Limpiar Mundo 3D
+            if (scene) {
+                pokesInWorld.forEach(p => scene.remove(p));
+                worldDecorations.forEach(d => scene.remove(d));
+                portals.forEach(p => scene.remove(p));
+                pokesInWorld = [];
+                worldDecorations = [];
+                portals = [];
+            }
+
+            if (player) {
+                player.position.set(0, 0, 15);
+                player.rotation.set(0, 0, 0);
+            }
+
+            saveLocalProgress();
+            updateTeamUI();
+            updateBackpackUI();
+            updateCandiesUI();
+            updatePotionButtons();
+        }
+
+
+        function saveLocalProgress() {
+            const nick = localStorage.getItem('currentUser');
+            if (nick) {
+                let users = JSON.parse(localStorage.getItem('users')) || [];
+                const userIndex = users.findIndex(u => u.nick === nick);
+                if (userIndex !== -1) {
+                    users[userIndex].progress = {
+                        team, backpack, candies, potions, evoPotions, megaPotions,
+                        maxLevel, currentLevel, currentBiome, activeIndex, hasFirstWinOrCapture,
+                        completedLevels: Array.from(completedLevels),
+                        normalModeHPState, // PERSISTENCIA
+                        storyModeHPState   // PERSISTENCIA
+                    };
+                    localStorage.setItem('users', JSON.stringify(users));
+                }
+            }
+        }
+
+        function returnToMap() {
+            enableBattleButtons(true);
+            inBattle = false;
+            isTeleporting = false;
+
+            // Re-habilitar todos los botones por seguridad
+            document.querySelectorAll('.btn-action').forEach(b => b.disabled = false);
+
+            if (currentGameMode === 'normal') {
+                // PERMADEATH: Resetear todo
+                isGameRunning = false;
+                resetPlayerProgress();
+                showToast("¡PROCESO REINICIADO!");
+
+                // Ocultar TODO
+                const overlays = ['game-over', 'battle-overlay', 'inventory', 'backpack-btn', 'save-exit-btn', 'backpack-overlay', 'switch-overlay', 'damage-challenge-hud', 'damage-challenge-results'];
+                overlays.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+
+                if (renderer) {
+                    renderer.domElement.style.display = 'none';
+                }
+
+                document.getElementById('starter-screen').style.display = 'flex';
+                updateTeamUI();
+            } else if (currentGameMode === 'story') {
+                // Modo Historia: Restaurar el estado de vida previo de historia para seguir intentando
+                if (storyModeHPState.length > 0) {
+                    team.forEach(p => {
+                        const saved = storyModeHPState.find(s => s.id === p.id);
+                        if (saved) p.hp = saved.hp;
+                    });
+                } else {
+                    // Si no hay snapshot, al menos curar para no estar trabado
+                    team.forEach(p => p.hp = p.maxHp);
+                }
+                updateTeamUI();
+                document.getElementById('game-over').style.display = 'none';
+                document.getElementById('battle-overlay').style.display = 'none';
+                openMap();
+            } else if (isDamageChallenge) {
+                // Si muere en desafío, simplemente salir al menú de resultados
+                endDamageChallenge();
+            }
+        }
+
+
+
+        function updateBackpackUI() {
+            const list = document.getElementById('backpack-list-overlay');
+            document.getElementById('backpack-count-overlay').innerText =
+                `${backpack.length}/50`;
+            list.innerHTML = backpack.map((p, i) => `
+                                            <div class="poke-card cursor-pointer" onclick="bringToTeam(${i})">
+                                                <div class="flex items-center gap-3">
+                                                    <img src="${p.spriteUrl}" class="w-10 h-10 pixelated">
+                                                    <div class="flex-1 min-w-0">
+                                                        <div class="flex justify-between items-center mb-1 flex-wrap">
+                                                            <span
+                                                                class="text-[10px] font-black uppercase truncate mr-1 text-white">${p.name}</span>
+                                                            <div class="flex gap-1">
+                                                                <span class="badge ${RANKS[p.rank].color}"
+                                                                    style="font-size:7px; padding:1px 4px">${RANKS[p.rank].label.substring(0,
+                1)}</span>
+                                                                ${p.types.map(t => `<span
+                                                                    class="type-badge type-${t.toLowerCase()}"
+                                                                    style="font-size:7px;">${t}</span>`).join('')}
+                                                            </div>
+                                                        </div>
+                                                        <div class="hp-bar h-1.5 border-none bg-slate-700">
+                                                            <div class="hp-fill ${p.hp < p.maxHp * 0.3 ? 'hp-low' : ''}"
+                                                                style="width:${(Math.max(0, p.hp) / p.maxHp) * 100}%">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            `).join('');
+        }
+
+        function updateCandiesUI() {
+            document.getElementById('candies-count').innerText = `Caramelos:
+                                            ${candies}`;
+            updatePotionButtons();
+        }
+
+        function evolvePokemon(index) {
+            const p = team[index];
+            if (!p.next) return showToast("No puede evolucionar más");
+
+            // Costes de evolución según el plan
+            const nextData = POKEDEX_DATA[p.next];
+            const nextRank = nextData.rank;
+
+            // Límite de Mega/Primario eliminado: se permiten múltiples en el equipo
+
+            let candyCost = 0;
+            let evoPotionCost = 0;
+            let megaPotionCost = 0;
+
+            if (nextRank === 'PHASE_2') candyCost = 5;
+            else if (nextRank === 'PHASE_3') candyCost = 10;
+            else if (nextRank === 'EX') { candyCost = 15; evoPotionCost = 1; }
+            else if (nextRank === 'ULTRA_BEAST') { candyCost = 10; }
+            else if (nextRank === 'MEGA_EX') { candyCost = 0; megaPotionCost = 1; } // Solo megapocion
+            else if (nextRank === 'PRIMARY') { candyCost = 50; megaPotionCost = 1; } // 50 caramelos + 1 megapocion
+            else candyCost = 20;
+
+            if (candies < candyCost) return showToast(`Necesitas ${candyCost} caramelos 🍬`);
+            if (evoPotions < evoPotionCost) return showToast(`Necesitas ${evoPotionCost} EvoPociones 🧪`);
+            if (megaPotions < megaPotionCost) return showToast(`Necesitas ${megaPotionCost} MegaPociones 💎`);
+
+            candies -= candyCost;
+            evoPotions -= evoPotionCost;
+            megaPotions -= megaPotionCost;
+
+            const rank = RANKS[nextRank];
+            p.id = p.next;
+            p.name = nextData.name;
+            p.rank = nextData.rank;
+            p.stage = nextData.stage;
+            p.next = nextData.next;
+            p.types = nextData.types;
+            p.maxHp = Math.floor(100 * rank.multiplier);
+            p.hp = p.maxHp;
+            p.url = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.id}.png`;
+            p.spriteUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+
+            updateTeamUI();
+            updateCandiesUI();
+            showToast(`¡${p.name} ha evolucionado!`);
+        }
+
+        function sendToBackpack(index) {
+            if (team.length === 1) return showToast("No puedes mover tu único Pokémon a la mochila");
+            if (backpack.length >= 50) return showToast("Mochila llena");
+            const p = team.splice(index, 1)[0];
+            backpack.push(p);
+            if (activeIndex >= team.length) activeIndex = 0;
+            updateTeamUI();
+            updateBackpackUI();
+            showToast("Enviado a mochila");
+        }
+
+        function bringToTeam(index) {
+            if (team.length >= 3) return showToast("Equipo lleno (máx 3)");
+            const p = backpack.splice(index, 1)[0];
+            team.push(p);
+            updateTeamUI();
+            updateBackpackUI();
+            showToast("Añadido al equipo");
+        }
+
+        function openBackpack() {
+            updateBackpackUI();
+            document.getElementById('backpack-overlay').style.display = 'flex';
+        }
+
+        function closeBackpack() {
+            document.getElementById('backpack-overlay').style.display = 'none';
+        }
+
+        function showSwitchOverlay() {
+            const list = document.getElementById('switch-list');
+            list.innerHTML = team.map((p, i) => {
+                if (p.hp > 0 && i !== activeIndex) {
+                    return `
+                                                <div class="poke-card cursor-pointer" onclick="switchTo(${i})">
+                                                    <div class="flex items-center gap-3">
+                                                        <img src="${p.spriteUrl}" class="w-10 h-10 pixelated">
+                                                        <div class="flex-1 min-w-0">
+                                                            <div
+                                                                class="flex justify-between items-center mb-1 flex-wrap">
+                                                                <span
+                                                                    class="text-[10px] font-black uppercase truncate mr-1 text-white">${p.name}</span>
+                                                                <div class="flex gap-1">
+                                                                    <span class="badge ${RANKS[p.rank].color}"
+                                                                        style="font-size:7px; padding:1px 4px">${RANKS[p.rank].label.substring(0,
+                        1)}</span>
+                                                                    ${p.types.map(t => `<span
+                                                                        class="type-badge type-${t.toLowerCase()}"
+                                                                        style="font-size:7px;">${t}</span>`).join('')}
+                                                                </div>
+                                                            </div>
+                                                            <div class="hp-bar h-1.5 border-none bg-slate-700">
+                                                                <div class="hp-fill ${p.hp < p.maxHp * 0.3 ? 'hp-low' : ''}"
+                                                                    style="width:${(Math.max(0, p.hp) / p.maxHp) * 100}%">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                `;
+                }
+                return '';
+            }).join('');
+            document.getElementById('switch-overlay').style.display = 'flex';
+        }
+
+        function switchTo(i) {
+            activeIndex = i;
+            updateTeamUI();
+            updateBattlePlayerInfo();
+            typeText(`¡Adelante ${team[i].name}!`);
+            document.getElementById('switch-overlay').style.display = 'none';
+            enableBattleButtons(true);
+        }
+
+        function removeEnemy() {
+            const s = pokesInWorld.find(s => s.userData === currentEnemy);
+            if (s) scene.remove(s);
+            pokesInWorld = pokesInWorld.filter(s => s.userData !== currentEnemy);
+        }
+
+        function endBattle(isFlee = false) {
+            // Si huye durante el Desafío de Daño, mostrar resultados
+            if (isFlee && isDamageChallenge) {
+                endDamageChallenge();
+                return;
+            }
+
+            inBattle = false;
+            enableBattleButtons(true); // BUG FIX: Asegurar botones activos
+            removeEnemy();
+            const ol = document.getElementById('battle-overlay');
+            ol.style.opacity = '0';
+            setTimeout(() => {
+                ol.style.display = 'none';
+                ol.style.opacity = '1';
+                document.getElementById('enemy-img').style.transform = 'scale(1)';
+                if (isFlee) {
+                    if (currentGameMode === 'story') {
+                        openMap();
+                    } else {
+                        updateBiomeVisuals(true);
+                    }
+                    showToast("¡Has huido!");
+                }
+            }, 300);
+        }
+
+        function enableBattleButtons(enable) {
+            // FIX: Solo afectar botones DENTRO del battle-overlay, no todos los btn-action de la página
+            const btns = document.querySelectorAll('#battle-overlay .battle-btn');
+            btns.forEach(b => b.disabled = !enable);
+        }
+
+        function typeText(text) {
+            const el = document.getElementById('battle-text');
+            el.innerText = text;
+            // Pequeña animación de pop
+            el.style.transform = "scale(1.05)";
+            setTimeout(() => el.style.transform = "scale(1)", 100);
+        }
+
+        function selectActive(i) {
+            if (team[i].hp > 0 && !inBattle) {
+                activeIndex = i;
+                updateTeamUI();
+            }
+        }
+        function showToast(m) {
+            const t = document.getElementById('toast');
+            t.innerText = m;
+            t.style.display = 'block';
+            t.classList.add('animate-bounce');
+            setTimeout(() => {
+                t.style.display = 'none';
+                t.classList.remove('animate-bounce');
+            }, 2500);
+        }
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // --- Sistema de Login y Registro ---
+        function showRegister() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('register-screen').style.display = 'flex';
+        }
+
+        function showLogin() {
+            document.getElementById('register-screen').style.display = 'none';
+            document.getElementById('login-screen').style.display = 'flex';
+        }
+
+        function logout() {
+            isGameRunning = false;
+            localStorage.removeItem('loggedIn');
+            localStorage.removeItem('currentUser');
+
+            // Ocultar todo
+            const idsToHide = ['mode-selection', 'story-map', 'inventory', 'backpack-btn', 'save-exit-btn', 'battle-overlay', 'backpack-overlay', 'switch-overlay', 'crafting-overlay', 'game-over', 'starter-screen'];
+            idsToHide.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+            if (renderer) renderer.domElement.style.display = 'none';
+
+            // Re-habilitar botones
+            document.querySelectorAll('.btn-action').forEach(b => b.disabled = false);
+
+            // Mostrar login
+            document.getElementById('login-screen').style.display = 'flex';
+            showToast("Sesión cerrada.");
+        }
+
+        function exitToModeSelection() {
+            isGameRunning = false;
+            inBattle = false;
+            isTeleporting = false;
+
+            try { saveLocalProgress(); } catch (e) { console.error(e); }
+
+            // Re-habilitar TODOS los botones
+            document.querySelectorAll('.btn-action').forEach(b => b.disabled = false);
+
+            // Ocultar TODAS las interfaces de juego (con null-check)
+            const idsToHide = ['story-map', 'inventory', 'backpack-btn', 'save-exit-btn', 'battle-overlay', 'backpack-overlay', 'switch-overlay', 'crafting-overlay', 'game-over'];
+            idsToHide.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+
+            // Detener renderizado 3D
+            if (renderer) {
+                renderer.domElement.style.display = 'none';
+            }
+
+            // Mostrar selección de modo
+            document.getElementById('mode-selection').style.display = 'flex';
+
+            showToast("Progreso guardado.");
+        }
+
+        function register() {
+            const nick = document.getElementById('reg-nick-input').value;
+            const password = document.getElementById('reg-password-input').value;
+            const confirmPassword =
+                document.getElementById('reg-confirm-password-input').value;
+
+            if (password !== confirmPassword) {
+                showToast("Las contraseñas no coinciden.");
+                return;
+            }
+
+            if (nick && password) {
+                let users = JSON.parse(localStorage.getItem('users')) || [];
+                if (users.some(user => user.nick === nick)) {
+                    showToast("El nick ya está usado. Elige otro.");
+                    return;
+                }
+
+                users.push({ nick, password, progress: {} });
+                localStorage.setItem('users', JSON.stringify(users));
+                showToast("¡Registro exitoso! Ahora inicia sesión.");
+                showLogin();
+            } else {
+                showToast("Por favor, ingresa nick y contraseña válidos.");
+            }
+        }
+
+        function login() {
+            const nick = document.getElementById('nick-input').value;
+            const password = document.getElementById('password-input').value;
+
+            if (nick && password) {
+                let users = JSON.parse(localStorage.getItem('users')) || [];
+                const user = users.find(u => u.nick === nick && u.password ===
+                    password);
+                if (user) {
+                    localStorage.setItem('loggedIn', 'true');
+                    localStorage.setItem('currentUser', nick);
+                    loadProgress(user.progress);
+                    document.getElementById('login-screen').style.display = 'none';
+                    if (team.length > 0) {
+                        showModeSelection();
+                    } else {
+                        document.getElementById('starter-screen').style.display = 'flex';
+                    }
+                    showToast("¡Sesión iniciada con éxito!");
+                } else {
+                    showToast("Credenciales incorrectas.");
+                }
+            } else {
+                showToast("Por favor, ingresa nick y contraseña válidos.");
+            }
+        }
+
+
+
+        function loadProgress(progress) {
+            if (progress) {
+                team = progress.team || [];
+                backpack = progress.backpack || [];
+                candies = progress.candies || 0;
+                potions = progress.potions || 0;
+                evoPotions = progress.evoPotions || 0;
+                megaPotions = progress.megaPotions || 0;
+                maxLevel = progress.maxLevel || 1;
+                currentLevel = progress.currentLevel || 1;
+                currentBiome = progress.currentBiome || 'GRASS';
+                activeIndex = progress.activeIndex || 0;
+                hasFirstWinOrCapture = progress.hasFirstWinOrCapture || false;
+                completedLevels = new Set(progress.completedLevels || []);
+                normalModeHPState = progress.normalModeHPState || [];
+                storyModeHPState = progress.storyModeHPState || [];
+
+                updateTeamUI();
+                updateCandiesUI();
+                updatePotionButtons();
+                updateBackpackUI();
+            }
+        }
+
+        // Verificar si ya está logueado al cargar
+        if (localStorage.getItem('loggedIn') === 'true') {
+            const nick = localStorage.getItem('currentUser');
+            if (nick) {
+                let users = JSON.parse(localStorage.getItem('users')) || [];
+                const user = users.find(u => u.nick === nick);
+                if (user) {
+                    loadProgress(user.progress);
+                    document.getElementById('login-screen').style.display = 'none';
+                    if (team.length > 0) {
+                        showModeSelection();
+                    } else {
+                        document.getElementById('starter-screen').style.display = 'flex';
+                    }
+                } else {
+                    localStorage.removeItem('loggedIn');
+                    localStorage.removeItem('currentUser');
+                }
+            } else {
+                localStorage.removeItem('loggedIn');
+            }
+        }
+    </script>
+</body>
+
+</html>
